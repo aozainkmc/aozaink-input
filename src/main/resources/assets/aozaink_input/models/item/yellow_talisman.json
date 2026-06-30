@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "aozaink_input:item/yellow_talisman"
+  }
+}

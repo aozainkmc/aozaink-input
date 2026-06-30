@@ -1,0 +1,13 @@
+{
+  "type": "minecraft:crafting_shapeless",
+  "ingredients": [
+    { "item": "minecraft:paper" },
+    { "item": "minecraft:paper" },
+    { "item": "minecraft:paper" },
+    { "item": "minecraft:yellow_dye" }
+  ],
+  "result": {
+    "id": "aozaink_input:yellow_talisman",
+    "count": 6
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "ambientocclusion": false,
+  "render_type": "minecraft:cutout",
+  "textures": {
+    "talisman": "aozaink_input:block/yellow_talisman",
+    "particle": "aozaink_input:block/yellow_talisman"
+  },
+  "elements": [
+    {
+      "from": [1, 0, 1],
+      "to": [15, 1, 15],
+      "faces": {
+        "up": { "uv": [0, 0, 16, 16], "texture": "#talisman" },
+        "down": { "uv": [0, 0, 16, 16], "texture": "#talisman" },
+        "north": { "uv": [0, 0, 16, 1], "texture": "#talisman" },
+        "south": { "uv": [0, 0, 16, 1], "texture": "#talisman" },
+        "west": { "uv": [0, 0, 16, 1], "texture": "#talisman" },
+        "east": { "uv": [0, 0, 16, 1], "texture": "#talisman" }
+      }
+    }
+  ]
+}
