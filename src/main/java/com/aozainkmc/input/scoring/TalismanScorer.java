@@ -23,18 +23,22 @@ public final class TalismanScorer {
     private static final double TIME_TARGET_FALLBACK_MS = 2500.0;
 
     private static final Map<String, Double> TIME_TARGET_MS_BY_CHAR = Map.ofEntries(
-        Map.entry("引", 2000.0),
-        Map.entry("广", 2200.0),
-        Map.entry("火", 2300.0),
-        Map.entry("护", 2800.0),
-        Map.entry("净", 2900.0),
-        Map.entry("退", 2900.0),
-        Map.entry("封", 3100.0),
-        Map.entry("疾", 3200.0),
-        Map.entry("强", 3200.0),
-        Map.entry("续", 3400.0),
-        Map.entry("雷", 3700.0),
-        Map.entry("镇", 4000.0)
+        Map.entry("引", 3123.0),
+        Map.entry("广", 1719.0),
+        Map.entry("火", 2793.0),
+        Map.entry("吸", 3744.0),
+        Map.entry("明", 4736.0),
+        Map.entry("护", 3805.0),
+        Map.entry("净", 4980.0),
+        Map.entry("退", 5775.0),
+        Map.entry("斩", 5401.0),
+        Map.entry("穿", 4755.0),
+        Map.entry("封", 7288.0),
+        Map.entry("强", 5865.0),
+        Map.entry("续", 5382.0),
+        Map.entry("雷", 6426.0),
+        Map.entry("魄", 6656.0),
+        Map.entry("镇", 9385.0)
     );
 
     private static final String REFERENCE_PATH = "/assets/aozaink_input/scoring/reference.json";
@@ -62,6 +66,10 @@ public final class TalismanScorer {
 
     public static boolean hasBaseline(String glyph) {
         return BASELINES.containsKey(glyph);
+    }
+
+    public static Optional<Baseline> baseline(String glyph) {
+        return Optional.ofNullable(BASELINES.get(glyph));
     }
 
     public static Optional<Score> score(String glyph, int strokeCount, int pointCount,

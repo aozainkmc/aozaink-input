@@ -49,6 +49,8 @@ runs {
 dependencies {
     implementation "net.neoforged:neoforge:${project.neo_version}"
     implementation project(":aozaink-core")
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
 processResources {
@@ -74,4 +76,8 @@ processResources {
 tasks.withType(JavaCompile).configureEach {
     options.encoding = "UTF-8"
     options.release = 21
+}
+
+tasks.named("test", Test).configure {
+    useJUnitPlatform()
 }

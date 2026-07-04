@@ -5,6 +5,7 @@ import com.aozainkmc.core.api.EngineType;
 import com.aozainkmc.input.block.AozaiInkBlocks;
 import com.aozainkmc.input.command.AozaiInputCommand;
 import com.aozainkmc.input.item.AozaiInkItems;
+import com.aozainkmc.input.item.AozaiInkInputRecipes;
 import com.mojang.logging.LogUtils;
 import java.util.List;
 import net.neoforged.bus.api.IEventBus;
@@ -22,8 +23,8 @@ public final class AozaiInkInput {
     public static final List<String> TALISMAN_GLYPHS = List.of(
         "一", "二", "三", "四", "五", "六", "七", "八", "九",
         "刻",
-        "镇", "封", "退", "引", "火", "雷", "护", "净",
-        "强", "续", "疾", "广"
+        "镇", "封", "退", "引", "火", "雷", "护", "净", "斩", "明", "吸", "魄",
+        "强", "续", "广", "穿"
     );
 
     public AozaiInkInput(IEventBus modBus) {
@@ -32,6 +33,7 @@ public final class AozaiInkInput {
 
         AozaiInkBlocks.register(modBus);
         AozaiInkItems.register(modBus);
+        AozaiInkInputRecipes.register(modBus);
 
         NeoForge.EVENT_BUS.addListener(this::registerCommands);
     }

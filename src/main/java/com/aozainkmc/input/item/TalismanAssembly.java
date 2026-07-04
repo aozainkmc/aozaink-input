@@ -32,7 +32,7 @@ public final class TalismanAssembly {
     public record Result(Type type, String slot1, String slot2, String slot3) {}
 
     private static final Set<String> SKILL_GLYPHS = Set.of(
-        "镇", "封", "退", "引", "火", "雷", "护", "净"
+        "镇", "封", "退", "引", "火", "雷", "护", "净", "斩", "明", "吸", "魄"
     );
 
     private TalismanAssembly() {}
@@ -45,8 +45,8 @@ public final class TalismanAssembly {
         if (isDigit(slot1) && isSkill(slot2) && slot3.isEmpty()) {
             return new Result(Type.SPECIFIED, slot1, slot2, slot3);
         }
-        if ("刻".equals(slot1)) {
-            return classifyInscription(slot2, slot3);
+        if ("刻".equals(slot1) || "刻".equals(slot2) || "刻".equals(slot3)) {
+            return classifyInscription(slot1, slot2, slot3);
         }
         if (isCombo(slot1, slot2, slot3)) {
             return new Result(Type.COMBO, slot1, slot2, slot3);
@@ -54,13 +54,48 @@ public final class TalismanAssembly {
         return new Result(Type.FAILED, slot1, slot2, slot3);
     }
 
-    private static Result classifyInscription(String slot2, String slot3) {
-        if (isSkill(slot2) || isModifier(slot2)) {
-            if (slot3.isEmpty() || isSkill(slot3) || isModifier(slot3)) {
-                return new Result(Type.INSCRIPTION, "刻", slot2, slot3);
+    private static Result classifyInscription(String slot1, String slot2, String slot3) {
+        if ("刻".equals(slot3)) {
+            return new Result(Type.FAILED, slot1, slot2, slot3);
+        }
+        if (!slot3.isEmpty() && !isModifier(slot3)) {
+            return new Result(Type.FAILED, slot1, slot2, slot3);
+        }
+        if (!"刻".equals(slot1) && !"刻".equals(slot2)) {
+            return new Result(Type.FAILED, slot1, slot2, slot3);
+        }
+
+        String[] slots = { slot1, slot2, slot3 };
+        int markCount = 0;
+        int skillCount = 0;
+        int modifierCount = 0;
+        java.util.HashSet<String> seen = new java.util.HashSet<>();
+        for (String slot : slots) {
+            if (slot.isEmpty()) continue;
+            if (!"刻".equals(slot) && !seen.add(slot)) {
+                return new Result(Type.FAILED, slot1, slot2, slot3);
+            }
+            if ("刻".equals(slot)) {
+                markCount++;
+                continue;
+            } else if (isSkill(slot)) {
+                skillCount++;
+            } else if (isModifier(slot)) {
+                if ("穿".equals(slot)) {
+                    return new Result(Type.FAILED, slot1, slot2, slot3);
+                }
+                modifierCount++;
+            } else {
+                return new Result(Type.FAILED, slot1, slot2, slot3);
             }
         }
-        return new Result(Type.FAILED, "刻", slot2, slot3);
+        if (markCount == 1 && skillCount == 1 && modifierCount <= 1) {
+            return new Result(Type.INSCRIPTION, slot1, slot2, slot3);
+        }
+        if (markCount == 1 && skillCount == 0 && modifierCount >= 1 && modifierCount <= 2) {
+            return new Result(Type.INSCRIPTION, slot1, slot2, slot3);
+        }
+        return new Result(Type.FAILED, slot1, slot2, slot3);
     }
 
     public static ItemStack createStack(Result result) {
@@ -110,7 +145,7 @@ public final class TalismanAssembly {
     }
 
     private static boolean isModifier(String glyph) {
-        return "强".equals(glyph) || "续".equals(glyph) || "疾".equals(glyph) || "广".equals(glyph);
+        return "强".equals(glyph) || "续".equals(glyph) || "广".equals(glyph) || "穿".equals(glyph);
     }
 
     private static boolean isDigit(String glyph) {

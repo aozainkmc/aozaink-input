@@ -1,9 +1,9 @@
 {
-  "疾": {
-    "stroke_count": 10.0,
-    "point_count": 29.0,
-    "duration_ms": 4671.0,
-    "confidence": 0.9998461008071899,
+  "穿": {
+    "stroke_count": 9.0,
+    "point_count": 23.0,
+    "duration_ms": 4755.0,
+    "confidence": 0.999790608882904,
     "samples": 1
   },
   "续": {
@@ -81,6 +81,34 @@
     "point_count": 11.0,
     "duration_ms": 1719.0,
     "confidence": 0.9998817443847656,
+    "samples": 1
+  },
+  "斩": {
+    "stroke_count": 8.0,
+    "point_count": 23.0,
+    "duration_ms": 5401.0,
+    "confidence": 0.9997593760490417,
+    "samples": 1
+  },
+  "明": {
+    "stroke_count": 8.0,
+    "point_count": 24.0,
+    "duration_ms": 4736.0,
+    "confidence": 0.9995669722557068,
+    "samples": 1
+  },
+  "吸": {
+    "stroke_count": 6.0,
+    "point_count": 22.0,
+    "duration_ms": 3744.0,
+    "confidence": 0.9996405839920044,
+    "samples": 1
+  },
+  "魄": {
+    "stroke_count": 14.0,
+    "point_count": 43.0,
+    "duration_ms": 6656.0,
+    "confidence": 0.9998158812522888,
     "samples": 1
   }
 }
