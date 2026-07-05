@@ -6,6 +6,7 @@ import com.aozainkmc.input.block.AozaiInkBlocks;
 import com.aozainkmc.input.command.AozaiInputCommand;
 import com.aozainkmc.input.item.AozaiInkItems;
 import com.aozainkmc.input.item.AozaiInkInputRecipes;
+import com.aozainkmc.input.network.AozaiInkNetworking;
 import com.mojang.logging.LogUtils;
 import java.util.List;
 import net.neoforged.bus.api.IEventBus;
@@ -34,6 +35,7 @@ public final class AozaiInkInput {
         AozaiInkBlocks.register(modBus);
         AozaiInkItems.register(modBus);
         AozaiInkInputRecipes.register(modBus);
+        modBus.addListener(AozaiInkNetworking::registerPayloads);
 
         NeoForge.EVENT_BUS.addListener(this::registerCommands);
     }

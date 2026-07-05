@@ -1,10 +1,10 @@
 package com.aozainkmc.input.client;
 
-import com.aozainkmc.core.AozaiInkCoreApi;
 import com.aozainkmc.core.api.EngineType;
 import com.aozainkmc.core.api.InkRecognitionRequest;
-import com.aozainkmc.core.api.InkRecognizedEvent;
 import com.aozainkmc.input.AozaiInkInput;
+import com.aozainkmc.input.network.AozaiInkNetworking;
+import com.aozainkmc.input.network.CastPaperPayload;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -13,9 +13,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec3;
 import org.lwjgl.glfw.GLFW;
 
@@ -24,7 +22,9 @@ public final class InkInputController {
     private static final int MAX_POINTS_PER_STROKE = 512;
     private static final int MAX_TOTAL_POINTS = 2048;
     private static final float MAX_ACTIVE_DISTANCE_SQR = 10.0f * 10.0f;
-    private static final long CLOSING_DURATION_MS = 500L;
+    private static final long EMPTY_CLOSING_DURATION_MS = 260L;
+    private static final long WRITTEN_CLOSING_DURATION_MS = 220L;
+    private static final long OPENING_DURATION_MS = 260L;
 
     private static final List<InkStroke> STROKES = new ArrayList<>();
     private static final InkCircleRenderer RENDERER = new InkCircleRenderer();
@@ -45,6 +45,10 @@ public final class InkInputController {
     private static InkPlane closingPlane;
     private static List<InkStroke> closingStrokes;
     private static long closingStartTimeMs;
+    private static long closingDurationMs;
+    private static boolean closingWritten;
+    private static boolean closingParticlesSpawned;
+    private static long openingStartTimeMs;
 
     private InkInputController() {}
 
@@ -79,7 +83,12 @@ public final class InkInputController {
 
         if (closingPlane != null) {
             long elapsed = System.currentTimeMillis() - closingStartTimeMs;
-            if (elapsed >= CLOSING_DURATION_MS) {
+            float progress = closingDurationMs <= 0L ? 1.0F : Math.min(1.0F, elapsed / (float) closingDurationMs);
+            if (closingWritten && !closingParticlesSpawned && progress >= 0.45F) {
+                closingParticlesSpawned = true;
+                spawnBurnParticles(closingPlane);
+            }
+            if (elapsed >= closingDurationMs) {
                 closingPlane = null;
                 closingStrokes = null;
             }
@@ -97,13 +106,14 @@ public final class InkInputController {
     public static void render(net.neoforged.neoforge.client.event.RenderLevelStageEvent event) {
         if (event.getStage() != net.neoforged.neoforge.client.event.RenderLevelStageEvent.Stage.AFTER_WEATHER) return;
 
-        if (closingPlane != null && System.currentTimeMillis() - closingStartTimeMs < CLOSING_DURATION_MS) {
-            RENDERER.render(event.getPoseStack(), event.getCamera(), closingPlane,
-                closingStrokes == null ? List.of() : closingStrokes, null, null, 0.0f);
+        if (closingPlane != null && System.currentTimeMillis() - closingStartTimeMs < closingDurationMs) {
+            float progress = (System.currentTimeMillis() - closingStartTimeMs) / (float) closingDurationMs;
+            RENDERER.renderClosing(event.getPoseStack(), event.getCamera(), closingPlane,
+                closingStrokes == null ? List.of() : closingStrokes, progress, closingWritten);
         }
 
         if (!active || plane == null) return;
-        RENDERER.render(event.getPoseStack(), event.getCamera(), plane, STROKES, currentStroke, currentHit, confirmProgress());
+        RENDERER.render(event.getPoseStack(), event.getCamera(), plane, STROKES, currentStroke, currentHit, confirmProgress(), openingProgress());
     }
 
     public static boolean isActive() { return active; }
@@ -120,14 +130,14 @@ public final class InkInputController {
 
     private static void openPaper(Minecraft minecraft, LocalPlayer player) {
         if (minecraft.screen != null) return;
-        Vec3 eye = player.getEyePosition(1.0F);
+        Vec3 paperAnchor = player.getEyePosition(1.0F);
         Vec3 look = player.getViewVector(1.0F).normalize();
-        plane = InkPlane.create(eye, look);
+        plane = InkPlane.create(paperAnchor, look);
         active = true;
+        openingStartTimeMs = System.currentTimeMillis();
         lastHeldItem = player.getMainHandItem().copy();
         clear();
         say(player, "白纸施写已展开：左键写，右键收束识别");
-        spawnOpenParticles(plane);
     }
 
     private static void finishAndClose(Minecraft minecraft, LocalPlayer player) {
@@ -155,51 +165,24 @@ public final class InkInputController {
 
         startClosing();
 
-        if (!minecraft.hasSingleplayerServer()) {
-            say(player, "当前只支持单人存档");
-            return;
-        }
-
-        MinecraftServer server = minecraft.getSingleplayerServer();
-        server.execute(() -> {
-            try {
-                net.minecraft.server.level.ServerPlayer sp = server.getPlayerList().getPlayer(player.getUUID());
-                if (sp == null) return;
-
-                InkRecognizedEvent event = AozaiInkCoreApi.recognizer().recognizeAndBroadcast(request, server, sp);
-
-                if (event == null) {
-                    minecraft.execute(() -> {
-                        spawnFailParticles(submittedPlane);
-                        say(player, "临时施法未生效");
-                    });
-                    return;
-                }
-
-                ItemStack mainHand = sp.getMainHandItem();
-                if (mainHand.is(Items.PAPER)) {
-                    mainHand.shrink(1);
-                }
-
-                String msg = "临时施法: " + event.result().topGlyph() +
-                    " " + Math.round(event.result().confidence() * 1000f) / 10f + "%";
-
-                minecraft.execute(() -> say(player, msg));
-            } catch (Exception e) {
-                AozaiInkInput.LOGGER.error("Temporary paper recognition failed", e);
-                minecraft.execute(() -> {
-                    spawnFailParticles(submittedPlane);
-                    say(player, "识别失败: " + e.getClass().getSimpleName());
-                });
-            }
-        });
+        AozaiInkNetworking.sendCastPaper(new CastPaperPayload(
+            request.trace(),
+            request.source().sourceId(),
+            request.source().powerMultiplier(),
+            request.ttlTicks()
+        ));
+        say(player, "临时施写已提交");
     }
 
     private static void startClosing() {
         if (plane != null) {
+            boolean hasStrokes = !STROKES.isEmpty();
             closingPlane = plane;
-            closingStrokes = STROKES.isEmpty() ? null : new ArrayList<>(STROKES);
+            closingStrokes = hasStrokes ? new ArrayList<>(STROKES) : null;
             closingStartTimeMs = System.currentTimeMillis();
+            closingDurationMs = hasStrokes ? WRITTEN_CLOSING_DURATION_MS : EMPTY_CLOSING_DURATION_MS;
+            closingWritten = hasStrokes;
+            closingParticlesSpawned = false;
         }
         close();
     }
@@ -211,6 +194,7 @@ public final class InkInputController {
         lastMouseDown = false;
         fromBack = false;
         lastHeldItem = null;
+        openingStartTimeMs = 0L;
         clear();
     }
 
@@ -286,24 +270,35 @@ public final class InkInputController {
         return Math.min(1.0f, Math.max(0.0f, (System.currentTimeMillis() - lastPenUpTimeMs) / 700.0f));
     }
 
+    private static float openingProgress() {
+        if (openingStartTimeMs <= 0L) return 1.0f;
+        return Math.min(1.0f, Math.max(0.0f,
+            (System.currentTimeMillis() - openingStartTimeMs) / (float) OPENING_DURATION_MS));
+    }
+
     private static void say(LocalPlayer player, String message) {
         player.displayClientMessage(Component.literal(message), true);
     }
 
-    private static void spawnOpenParticles(InkPlane plane) {
+    private static void spawnBurnParticles(InkPlane plane) {
         try {
             Minecraft minecraft = Minecraft.getInstance();
             if (minecraft.level == null) return;
             Vec3 center = plane.center();
             Vec3 right = plane.right();
             Vec3 up = plane.up();
-            float radius = plane.radius() * 1.05f;
-            for (int i = 0; i < 48; i++) {
-                double angle = Math.PI * 2.0 * i / 48.0;
-                Vec3 offset = right.scale(Math.cos(angle) * radius).add(up.scale(Math.sin(angle) * radius));
-                Vec3 pos = center.add(offset);
-                minecraft.level.addParticle(ParticleTypes.SCRAPE, pos.x, pos.y, pos.z,
-                    Math.cos(angle) * 0.02, 0.01, Math.sin(angle) * 0.02);
+            Vec3 normal = plane.normal();
+            float radius = plane.radius();
+            for (int i = 0; i < 24; i++) {
+                double side = (minecraft.level.random.nextDouble() - 0.5D) * radius * 1.35D;
+                double rise = (minecraft.level.random.nextDouble() - 0.5D) * radius * 0.18D;
+                Vec3 pos = center.add(right.scale(side)).add(up.scale(rise)).add(normal.scale(-0.04D));
+                minecraft.level.addParticle(ParticleTypes.FLAME, pos.x, pos.y, pos.z,
+                    normal.x * 0.025D, 0.045D + minecraft.level.random.nextDouble() * 0.035D, normal.z * 0.025D);
+                if (i % 3 == 0) {
+                    minecraft.level.addParticle(ParticleTypes.SMOKE, pos.x, pos.y, pos.z,
+                        normal.x * 0.015D, 0.025D, normal.z * 0.015D);
+                }
             }
         } catch (Exception ignored) {}
     }

@@ -6,38 +6,22 @@ import com.aozainkmc.core.api.InkPoint;
 import com.aozainkmc.core.api.InkRecognitionMode;
 import com.aozainkmc.core.api.InkRecognitionRequest;
 import com.aozainkmc.core.api.InkRecognitionResult;
-import com.aozainkmc.core.api.InkRecognizedEvent;
 import com.aozainkmc.core.api.InkSource;
 import com.aozainkmc.core.api.InkTrace;
 import com.aozainkmc.input.AozaiInkInput;
-import com.aozainkmc.input.block.AozaiInkBlocks;
-import com.aozainkmc.input.effect.TailModifierFailureEffect;
-import com.aozainkmc.input.item.TalismanAssembly;
-import com.aozainkmc.input.scoring.TailModifierStability;
-import com.aozainkmc.input.scoring.TalismanGrade;
-import com.aozainkmc.input.scoring.TalismanScorer;
-import com.aozainkmc.input.signal.InputSignals;
+import com.aozainkmc.input.network.AozaiInkNetworking;
+import com.aozainkmc.input.network.SubmitTalismanPayload;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.component.DataComponents;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.MinecraftServer;
-import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.component.CustomData;
-import net.minecraft.world.level.block.Blocks;
 
 public final class TalismanWritingScreen extends Screen {
     private static final long AUTO_RECOGNIZE_MS = 700L;
@@ -182,163 +166,26 @@ public final class TalismanWritingScreen extends Screen {
     }
 
     private void finish() {
-        String[] glyphs = new String[SLOT_COUNT];
+        List<SubmitTalismanPayload.Slot> slots = new ArrayList<>(SLOT_COUNT);
         for (int i = 0; i < SLOT_COUNT; i++) {
-            SlotState slot = slots[i];
+            SlotState slot = this.slots[i];
             if (!slot.hasInk()) {
-                glyphs[i] = "";
+                slots.add(new SubmitTalismanPayload.Slot(false, new InkTrace(List.of())));
             } else {
                 if (slot.dirty || slot.recognizedGlyph == null) {
                     recognize(slot);
                 }
-                glyphs[i] = slot.recognizedGlyph == null ? "" : slot.recognizedGlyph;
+                slots.add(new SubmitTalismanPayload.Slot(true, slot.toInkTrace()));
             }
         }
-        if (invalidTailGlyph(glyphs[MODIFIER_SLOT])) {
-            status = "尾修槽只接受 强 / 续 / 广 / 穿";
-            return;
-        }
-        TailModifierStability.Result tailStability = null;
-        String tailGlyph = normalizeGlyph(glyphs[MODIFIER_SLOT]);
-        if (!tailGlyph.isEmpty()) {
-            SlotState tailSlot = slots[MODIFIER_SLOT];
-            int strokeCount = tailSlot.simplifiedStrokeCount > 0 ? tailSlot.simplifiedStrokeCount : tailSlot.strokeCount();
-            tailStability = TailModifierStability.evaluate(tailGlyph, strokeCount).orElse(null);
-        }
-        submit(glyphs[0], glyphs[1], glyphs[2], tailStability);
+        submit(slots);
     }
 
-    private void submit(String slot1, String slot2, String slot3, TailModifierStability.Result tailStability) {
+    private void submit(List<SubmitTalismanPayload.Slot> slots) {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player == null) return;
-        MinecraftServer server = minecraft.getSingleplayerServer();
-        if (server == null) {
-            status = "当前版本黄符成符只支持单人/局域网房主测试";
-            return;
-        }
-        server.execute(() -> {
-            ServerPlayer player = server.getPlayerList().getPlayer(minecraft.player.getUUID());
-            if (player == null) return;
-            if (!player.serverLevel().getBlockState(blockPos).is(AozaiInkBlocks.YELLOW_TALISMAN.get())) {
-                player.sendSystemMessage(Component.literal("[AozaiInk] 黄符方块已不存在"));
-                return;
-            }
-            if (tailStability != null && player.getRandom().nextDouble() >= tailStability.successChance()) {
-                player.serverLevel().setBlock(blockPos, Blocks.AIR.defaultBlockState(), 3);
-                player.displayClientMessage(Component.literal("尾修失败，符力暴乱"), true);
-                InputSignals.tailModifierChaos(player, false, false, false);
-                TailModifierFailureEffect.start(player, blockPos);
-                return;
-            }
-            TalismanAssembly.Result result = TalismanAssembly.classify(slot1, slot2, slot3);
-            ItemStack stack = TalismanAssembly.createStack(result);
-            player.serverLevel().setBlock(blockPos, Blocks.AIR.defaultBlockState(), 3);
-            broadcastTalismanRecognitions(player, server, result, stack);
-            triggerTalismanCreated(player, result, stack);
-            if (!player.getInventory().add(stack)) {
-                player.drop(stack, false);
-            }
-            player.sendSystemMessage(Component.literal("[AozaiInk] 成符: " + result.type().displayName()
-                + " [" + result.slot1() + ", " + result.slot2() + ", " + result.slot3() + "]"));
-        });
+        AozaiInkNetworking.sendSubmitTalisman(new SubmitTalismanPayload(blockPos, slots));
         minecraft.setScreen(null);
-    }
-
-    private static void triggerTalismanCreated(ServerPlayer player, TalismanAssembly.Result result, ItemStack stack) {
-        String type = result.type().name().toLowerCase();
-        String grade = overallGrade(stack, new String[] {result.slot1(), result.slot2(), result.slot3()}).name().toLowerCase();
-        boolean tail = !normalizeGlyph(result.slot3()).isEmpty();
-        InputSignals.talismanCreated(player, type, grade, tail);
-    }
-
-    private static TalismanGrade overallGrade(ItemStack stack, String[] slots) {
-        CustomData data = stack.get(DataComponents.CUSTOM_DATA);
-        CompoundTag tag = data == null ? new CompoundTag() : data.copyTag();
-        TalismanGrade worst = null;
-        for (int i = 0; i < slots.length; i++) {
-            if (slots[i] == null || slots[i].isBlank()) continue;
-            TalismanGrade grade = TalismanGrade.byName(tag.getString("aozaink:grade" + (i + 1)));
-            if (grade == null) continue;
-            if (worst == null || grade.ordinal() > worst.ordinal()) {
-                worst = grade;
-            }
-        }
-        if (resultType(stack) == TalismanAssembly.Type.FAILED) {
-            return TalismanGrade.WASTE;
-        }
-        return worst == null ? TalismanGrade.FINE : worst;
-    }
-
-    private static TalismanAssembly.Type resultType(ItemStack stack) {
-        CompoundTag tag = TalismanAssembly.talismanTag(stack);
-        try {
-            return TalismanAssembly.Type.valueOf(tag.getString(TalismanAssembly.TAG_TYPE).toUpperCase());
-        } catch (IllegalArgumentException exception) {
-            return TalismanAssembly.Type.FAILED;
-        }
-    }
-
-    private void broadcastTalismanRecognitions(ServerPlayer player, MinecraftServer server, TalismanAssembly.Result result, ItemStack stack) {
-        String type = result.type().name().toLowerCase();
-        Map<Integer, String> slots = Map.of(1, result.slot1(), 2, result.slot2(), 3, result.slot3());
-        for (int i = 1; i <= 3; i++) {
-            String glyph = slots.get(i);
-            if (glyph == null || glyph.isEmpty()) continue;
-            if (result.type() == TalismanAssembly.Type.SPECIFIED && i != 2) continue;
-            if (result.type() == TalismanAssembly.Type.INSCRIPTION && "刻".equals(glyph)) continue;
-
-            Map<String, Object> extra = new HashMap<>();
-            extra.put("talisman_type", type);
-            extra.put("slot", String.valueOf(i));
-            if (result.type() == TalismanAssembly.Type.SPECIFIED) {
-                extra.put("specified_number", result.slot1());
-                extra.put("specified_glyph", result.slot2());
-            }
-
-            InkTrace trace = slotTrace(i - 1);
-            if (trace == null || trace.isEmpty()) continue;
-            InkRecognitionRequest request = new InkRecognitionRequest(
-                trace,
-                null,
-                InkRecognitionMode.ONLINE,
-                AozaiInkInput.TALISMAN_GLYPHS,
-                20L * 60L * 10L,
-                new InkSource(AozaiInkInput.SOURCE_TRAJECTORY, 1.0f, "yellow_talisman", 0, extra)
-            );
-            try {
-                InkRecognizedEvent event = AozaiInkCoreApi.recognizer().recognizeAndBroadcast(request, server, player);
-                embedScore(stack, i, event);
-            } catch (Exception e) {
-                AozaiInkInput.LOGGER.warn("Talisman recognition broadcast failed for slot {}: {}", i, e.getMessage());
-            }
-        }
-    }
-
-    private static void embedScore(ItemStack stack, int slot, InkRecognizedEvent event) {
-        if (event == null) return;
-        InkRecognitionResult r = event.result();
-        Optional<TalismanScorer.Score> score = TalismanScorer.score(
-            r.topGlyph(), r.simplifiedStrokeCount(), r.simplifiedPointCount(), r.writingDurationMs(), r.confidence());
-        if (score.isEmpty()) return;
-        TalismanGrade grade = TalismanGrade.of(score.get().composite());
-        CustomData data = stack.get(DataComponents.CUSTOM_DATA);
-        CompoundTag tag = data == null ? new CompoundTag() : data.copyTag();
-        tag.putString("aozaink:grade" + slot, grade.name());
-        stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
-    }
-
-    private InkTrace slotTrace(int index) {
-        SlotState slot = slots[index];
-        if (slot == null || slot.strokes.isEmpty()) return null;
-        List<List<InkPoint>> strokes = new ArrayList<>();
-        for (List<DrawPoint> stroke : slot.strokes) {
-            List<InkPoint> points = new ArrayList<>();
-            for (DrawPoint point : stroke) {
-                points.add(new InkPoint(point.x, point.y, point.timeMs));
-            }
-            if (!points.isEmpty()) strokes.add(points);
-        }
-        return strokes.isEmpty() ? null : new InkTrace(strokes);
     }
 
     private void recognize(SlotState slot) {
@@ -622,6 +469,19 @@ public final class TalismanWritingScreen extends Screen {
                 if (!stroke.isEmpty()) count++;
             }
             return count;
+        }
+
+        private InkTrace toInkTrace() {
+            List<List<InkPoint>> pointStrokes = new ArrayList<>();
+            for (List<DrawPoint> stroke : strokes) {
+                if (stroke.isEmpty()) continue;
+                List<InkPoint> points = new ArrayList<>(stroke.size());
+                for (DrawPoint point : stroke) {
+                    points.add(new InkPoint(point.x, point.y, point.timeMs));
+                }
+                pointStrokes.add(points);
+            }
+            return new InkTrace(pointStrokes);
         }
     }
 

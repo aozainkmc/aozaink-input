@@ -16,8 +16,9 @@ import org.joml.Matrix4f;
 
 public final class InkCircleRenderer {
     private static final ResourceLocation PAPER_TEXTURE =
-        ResourceLocation.fromNamespaceAndPath("minecraft", "textures/item/paper.png");
+        ResourceLocation.fromNamespaceAndPath("aozaink_input", "textures/gui/paper.png");
 
+    private static final float PAPER_ASPECT = 1086.0F / 1448.0F;
     private static final double PAPER_LAYER_OFFSET = -0.010D;
     private static final double STROKE_LAYER_OFFSET = -0.026D;
     private static final float STROKE_OUTLINE_WIDTH = 0.040F;
@@ -26,11 +27,46 @@ public final class InkCircleRenderer {
 
     public void render(PoseStack poseStack, Camera camera, InkPlane plane,
                        List<InkStroke> strokes, InkStroke currentStroke, PlaneHit currentHit,
-                       float confirmProgress) {
+                       float confirmProgress, float openProgress) {
         Vec3 camPos = camera.getPosition();
+        float easedOpen = easeOut(openProgress);
+        Vec3 targetCenter = plane.center();
+        Vec3 startCenter = openingStart(plane);
+        Vec3 renderCenter = startCenter.add(targetCenter.subtract(startCenter).scale(easedOpen));
+        float openScale = 0.28F + 0.72F * easedOpen;
+        renderAt(poseStack, camPos, plane, renderCenter, openScale, 1.0F, strokes, currentStroke, currentHit, confirmProgress);
+    }
 
+    public void renderClosing(PoseStack poseStack, Camera camera, InkPlane plane,
+                              List<InkStroke> strokes, float progress, boolean written) {
+        Vec3 camPos = camera.getPosition();
+        float clamped = Math.max(0.0F, Math.min(1.0F, progress));
+        if (!written) {
+            float openProgress = 1.0F - clamped;
+            float easedOpen = easeOut(openProgress);
+            Vec3 targetCenter = plane.center();
+            Vec3 startCenter = openingStart(plane);
+            Vec3 renderCenter = startCenter.add(targetCenter.subtract(startCenter).scale(easedOpen));
+            float openScale = 0.28F + 0.72F * easedOpen;
+            renderAt(poseStack, camPos, plane, renderCenter, openScale, 1.0F, strokes, null, null, 0.0F);
+            return;
+        }
+
+        float heightScale = 1.0F - easeOut(clamped) * 0.90F;
+        renderAt(poseStack, camPos, plane, plane.center(), 1.0F, Math.max(0.10F, heightScale),
+            strokes, null, null, 0.0F);
+    }
+
+    private static Vec3 openingStart(InkPlane plane) {
+        return plane.center().subtract(plane.normal().scale(2.2D)).subtract(0.0D, 0.45D, 0.0D);
+    }
+
+    private void renderAt(PoseStack poseStack, Vec3 camPos, InkPlane plane, Vec3 renderCenter,
+                          float uniformScale, float verticalScale, List<InkStroke> strokes,
+                          InkStroke currentStroke, PlaneHit currentHit, float confirmProgress) {
         poseStack.pushPose();
-        poseStack.translate(plane.center().x - camPos.x, plane.center().y - camPos.y, plane.center().z - camPos.z);
+        poseStack.translate(renderCenter.x - camPos.x, renderCenter.y - camPos.y, renderCenter.z - camPos.z);
+        poseStack.scale(uniformScale, uniformScale * verticalScale, uniformScale);
 
         renderPaper(poseStack, plane);
         renderInk(poseStack, plane, strokes, currentStroke, currentHit);
@@ -42,16 +78,23 @@ public final class InkCircleRenderer {
         poseStack.popPose();
     }
 
+    private static float easeOut(float progress) {
+        float t = Math.max(0.0F, Math.min(1.0F, progress));
+        float inv = 1.0F - t;
+        return 1.0F - inv * inv * inv;
+    }
+
     private void renderPaper(PoseStack poseStack, InkPlane plane) {
         float r = plane.radius();
-        Vec3 rx = plane.right().scale(r);
+        Vec3 rx = plane.right().scale(r * PAPER_ASPECT);
         Vec3 ry = plane.up().scale(r);
         Vec3 n = plane.normal().scale(PAPER_LAYER_OFFSET);
 
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.disableCull();
-        RenderSystem.depthMask(false);
+        RenderSystem.enableDepthTest();
+        RenderSystem.depthMask(true);
         RenderSystem.setShaderTexture(0, PAPER_TEXTURE);
         RenderSystem.setShader(GameRenderer::getPositionTexShader);
 
