@@ -40,6 +40,9 @@ public final class ClassicSubmissionHelper {
 
         List<List<InkPoint>> normalizedStrokes = new ArrayList<>();
         for (InkStroke stroke : strokes) {
+            if (stroke.fromBack() != fromBack) {
+                continue;
+            }
             List<InkPoint> points = new ArrayList<>();
             for (InkStrokePoint sp : stroke.points()) {
                 float u = fromBack ? -sp.u() : sp.u();

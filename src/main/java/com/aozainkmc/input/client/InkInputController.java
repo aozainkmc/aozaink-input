@@ -47,6 +47,8 @@ public final class InkInputController {
     private static long closingStartTimeMs;
     private static long closingDurationMs;
     private static boolean closingWritten;
+    private static boolean closingFromBack;
+    private static Vec3 closingReturnCenter;
     private static boolean closingParticlesSpawned;
     private static long openingStartTimeMs;
 
@@ -91,6 +93,7 @@ public final class InkInputController {
             if (elapsed >= closingDurationMs) {
                 closingPlane = null;
                 closingStrokes = null;
+                closingReturnCenter = null;
             }
         }
 
@@ -109,11 +112,13 @@ public final class InkInputController {
         if (closingPlane != null && System.currentTimeMillis() - closingStartTimeMs < closingDurationMs) {
             float progress = (System.currentTimeMillis() - closingStartTimeMs) / (float) closingDurationMs;
             RENDERER.renderClosing(event.getPoseStack(), event.getCamera(), closingPlane,
-                closingStrokes == null ? List.of() : closingStrokes, progress, closingWritten);
+                closingStrokes == null ? List.of() : closingStrokes, progress, closingWritten,
+                closingFromBack, closingReturnCenter);
         }
 
         if (!active || plane == null) return;
-        RENDERER.render(event.getPoseStack(), event.getCamera(), plane, STROKES, currentStroke, currentHit, confirmProgress(), openingProgress());
+        RENDERER.render(event.getPoseStack(), event.getCamera(), plane, STROKES, currentStroke, currentHit,
+            confirmProgress(), openingProgress(), fromBack);
     }
 
     public static boolean isActive() { return active; }
@@ -145,8 +150,9 @@ public final class InkInputController {
         finishStroke(true, minecraft);
         InkPlane submittedPlane = plane;
         boolean submittedFromBack = fromBack;
+        List<InkStroke> submittedStrokes = strokesForSide(submittedFromBack);
 
-        if (STROKES.isEmpty()) {
+        if (submittedStrokes.isEmpty()) {
             startClosing();
             say(player, "白纸施写已关闭");
             return;
@@ -154,7 +160,7 @@ public final class InkInputController {
 
         InkRecognitionRequest request;
         try {
-            request = ClassicSubmissionHelper.buildRequest(STROKES, submittedFromBack, CURRENT_ENGINE_TYPE);
+            request = ClassicSubmissionHelper.buildRequest(submittedStrokes, submittedFromBack, CURRENT_ENGINE_TYPE);
         } catch (Exception e) {
             spawnFailParticles(submittedPlane);
             say(player, "识别请求生成失败: " + e.getClass().getSimpleName());
@@ -176,12 +182,15 @@ public final class InkInputController {
 
     private static void startClosing() {
         if (plane != null) {
-            boolean hasStrokes = !STROKES.isEmpty();
+            List<InkStroke> visibleStrokes = strokesForSide(fromBack);
+            boolean hasStrokes = !visibleStrokes.isEmpty();
             closingPlane = plane;
-            closingStrokes = hasStrokes ? new ArrayList<>(STROKES) : null;
+            closingStrokes = hasStrokes ? new ArrayList<>(visibleStrokes) : null;
             closingStartTimeMs = System.currentTimeMillis();
             closingDurationMs = hasStrokes ? WRITTEN_CLOSING_DURATION_MS : EMPTY_CLOSING_DURATION_MS;
             closingWritten = hasStrokes;
+            closingFromBack = fromBack;
+            closingReturnCenter = playerChestCenter();
             closingParticlesSpawned = false;
         }
         close();
@@ -234,7 +243,7 @@ public final class InkInputController {
 
         long now = System.currentTimeMillis();
         if (currentStroke == null || !lastMouseDown) {
-            currentStroke = new InkStroke();
+            currentStroke = new InkStroke(fromBack);
             autoRecognizePending = false;
             recognizedSinceChange = false;
         }
@@ -243,7 +252,7 @@ public final class InkInputController {
             InkStrokePoint last = currentStroke.last();
             if (currentStroke.size() >= MAX_POINTS_PER_STROKE) {
                 finishStroke(false, null);
-                currentStroke = new InkStroke();
+                currentStroke = new InkStroke(fromBack);
             } else if (last.distanceTo(hit.u(), hit.v()) < MIN_POINT_DISTANCE) {
                 return;
             }
@@ -274,6 +283,24 @@ public final class InkInputController {
         if (openingStartTimeMs <= 0L) return 1.0f;
         return Math.min(1.0f, Math.max(0.0f,
             (System.currentTimeMillis() - openingStartTimeMs) / (float) OPENING_DURATION_MS));
+    }
+
+    private static List<InkStroke> strokesForSide(boolean sideFromBack) {
+        List<InkStroke> visible = new ArrayList<>();
+        for (InkStroke stroke : STROKES) {
+            if (stroke.fromBack() == sideFromBack && !stroke.isEmpty()) {
+                visible.add(stroke);
+            }
+        }
+        return visible;
+    }
+
+    private static Vec3 playerChestCenter() {
+        LocalPlayer player = Minecraft.getInstance().player;
+        if (player == null) {
+            return null;
+        }
+        return player.getEyePosition(1.0F).subtract(0.0D, 0.62D, 0.0D);
     }
 
     private static void say(LocalPlayer player, String message) {

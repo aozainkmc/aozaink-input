@@ -27,34 +27,36 @@ public final class InkCircleRenderer {
 
     public void render(PoseStack poseStack, Camera camera, InkPlane plane,
                        List<InkStroke> strokes, InkStroke currentStroke, PlaneHit currentHit,
-                       float confirmProgress, float openProgress) {
+                       float confirmProgress, float openProgress, boolean viewingFromBack) {
         Vec3 camPos = camera.getPosition();
         float easedOpen = easeOut(openProgress);
         Vec3 targetCenter = plane.center();
         Vec3 startCenter = openingStart(plane);
         Vec3 renderCenter = startCenter.add(targetCenter.subtract(startCenter).scale(easedOpen));
         float openScale = 0.28F + 0.72F * easedOpen;
-        renderAt(poseStack, camPos, plane, renderCenter, openScale, 1.0F, strokes, currentStroke, currentHit, confirmProgress);
+        renderAt(poseStack, camPos, plane, renderCenter, openScale, 1.0F,
+            strokes, currentStroke, currentHit, confirmProgress, viewingFromBack);
     }
 
     public void renderClosing(PoseStack poseStack, Camera camera, InkPlane plane,
-                              List<InkStroke> strokes, float progress, boolean written) {
+                              List<InkStroke> strokes, float progress, boolean written,
+                              boolean viewingFromBack, Vec3 returnCenter) {
         Vec3 camPos = camera.getPosition();
         float clamped = Math.max(0.0F, Math.min(1.0F, progress));
         if (!written) {
-            float openProgress = 1.0F - clamped;
-            float easedOpen = easeOut(openProgress);
+            float easedClose = easeOut(clamped);
             Vec3 targetCenter = plane.center();
-            Vec3 startCenter = openingStart(plane);
-            Vec3 renderCenter = startCenter.add(targetCenter.subtract(startCenter).scale(easedOpen));
-            float openScale = 0.28F + 0.72F * easedOpen;
-            renderAt(poseStack, camPos, plane, renderCenter, openScale, 1.0F, strokes, null, null, 0.0F);
+            Vec3 endCenter = returnCenter == null ? openingStart(plane) : returnCenter;
+            Vec3 renderCenter = targetCenter.add(endCenter.subtract(targetCenter).scale(easedClose));
+            float openScale = 1.0F - 0.72F * easedClose;
+            renderAt(poseStack, camPos, plane, renderCenter, openScale, 1.0F,
+                strokes, null, null, 0.0F, viewingFromBack);
             return;
         }
 
         float heightScale = 1.0F - easeOut(clamped) * 0.90F;
         renderAt(poseStack, camPos, plane, plane.center(), 1.0F, Math.max(0.10F, heightScale),
-            strokes, null, null, 0.0F);
+            strokes, null, null, 0.0F, viewingFromBack);
     }
 
     private static Vec3 openingStart(InkPlane plane) {
@@ -63,13 +65,14 @@ public final class InkCircleRenderer {
 
     private void renderAt(PoseStack poseStack, Vec3 camPos, InkPlane plane, Vec3 renderCenter,
                           float uniformScale, float verticalScale, List<InkStroke> strokes,
-                          InkStroke currentStroke, PlaneHit currentHit, float confirmProgress) {
+                          InkStroke currentStroke, PlaneHit currentHit, float confirmProgress,
+                          boolean viewingFromBack) {
         poseStack.pushPose();
         poseStack.translate(renderCenter.x - camPos.x, renderCenter.y - camPos.y, renderCenter.z - camPos.z);
         poseStack.scale(uniformScale, uniformScale * verticalScale, uniformScale);
 
         renderPaper(poseStack, plane);
-        renderInk(poseStack, plane, strokes, currentStroke, currentHit);
+        renderInk(poseStack, plane, strokes, currentStroke, currentHit, viewingFromBack);
 
         if (confirmProgress > 0.0f) {
             renderConfirmProgress(poseStack, plane, confirmProgress);
@@ -118,9 +121,12 @@ public final class InkCircleRenderer {
     }
 
     private void renderInk(PoseStack poseStack, InkPlane plane, List<InkStroke> strokes,
-                           InkStroke currentStroke, PlaneHit currentHit) {
-        boolean hasCurrentStroke = currentStroke != null && !currentStroke.isEmpty();
-        if (strokes.isEmpty() && !hasCurrentStroke && currentHit == null) return;
+                           InkStroke currentStroke, PlaneHit currentHit, boolean viewingFromBack) {
+        boolean hasVisibleStroke = strokes.stream().anyMatch(stroke -> stroke.fromBack() == viewingFromBack && !stroke.isEmpty());
+        boolean hasCurrentStroke = currentStroke != null
+            && currentStroke.fromBack() == viewingFromBack
+            && !currentStroke.isEmpty();
+        if (!hasVisibleStroke && !hasCurrentStroke && currentHit == null) return;
 
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
@@ -133,13 +139,15 @@ public final class InkCircleRenderer {
         BufferBuilder builder = tessellator.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_COLOR);
 
         for (InkStroke stroke : strokes) {
-            renderStroke(builder, matrix, plane, stroke);
+            if (stroke.fromBack() == viewingFromBack) {
+                renderStroke(builder, matrix, plane, stroke, viewingFromBack);
+            }
         }
-        if (currentStroke != null) {
-            renderStroke(builder, matrix, plane, currentStroke);
+        if (currentStroke != null && currentStroke.fromBack() == viewingFromBack) {
+            renderStroke(builder, matrix, plane, currentStroke, viewingFromBack);
         }
         if (currentHit != null) {
-            renderCursor(builder, matrix, plane, currentHit);
+            renderCursor(builder, matrix, plane, currentHit, viewingFromBack);
         }
 
         BufferUploader.drawWithShader(builder.buildOrThrow());
@@ -148,44 +156,44 @@ public final class InkCircleRenderer {
         RenderSystem.disableBlend();
     }
 
-    private void renderStroke(BufferBuilder builder, Matrix4f matrix, InkPlane plane, InkStroke stroke) {
+    private void renderStroke(BufferBuilder builder, Matrix4f matrix, InkPlane plane, InkStroke stroke, boolean viewingFromBack) {
         if (stroke.isEmpty()) return;
         List<InkStrokePoint> points = stroke.points();
 
         for (InkStrokePoint point : points) {
-            disk(builder, matrix, plane, point.u(), point.v(), STROKE_OUTLINE_WIDTH * 0.55F, 34, 28, 20, 245);
+            disk(builder, matrix, plane, point.u(), point.v(), STROKE_OUTLINE_WIDTH * 0.55F, viewingFromBack, 34, 28, 20, 245);
         }
         for (int i = 1; i < points.size(); i++) {
             InkStrokePoint a = points.get(i - 1);
             InkStrokePoint b = points.get(i);
-            ribbon(builder, matrix, plane, a.u(), a.v(), b.u(), b.v(), STROKE_OUTLINE_WIDTH, 34, 28, 20, 245);
+            ribbon(builder, matrix, plane, a.u(), a.v(), b.u(), b.v(), STROKE_OUTLINE_WIDTH, viewingFromBack, 34, 28, 20, 245);
         }
 
         for (InkStrokePoint point : points) {
-            disk(builder, matrix, plane, point.u(), point.v(), STROKE_CORE_WIDTH * 0.5F, 8, 8, 8, 255);
+            disk(builder, matrix, plane, point.u(), point.v(), STROKE_CORE_WIDTH * 0.5F, viewingFromBack, 8, 8, 8, 255);
         }
         for (int i = 1; i < points.size(); i++) {
             InkStrokePoint a = points.get(i - 1);
             InkStrokePoint b = points.get(i);
-            ribbon(builder, matrix, plane, a.u(), a.v(), b.u(), b.v(), STROKE_CORE_WIDTH, 8, 8, 8, 255);
+            ribbon(builder, matrix, plane, a.u(), a.v(), b.u(), b.v(), STROKE_CORE_WIDTH, viewingFromBack, 8, 8, 8, 255);
         }
     }
 
-    private void renderCursor(BufferBuilder builder, Matrix4f matrix, InkPlane plane, PlaneHit hit) {
+    private void renderCursor(BufferBuilder builder, Matrix4f matrix, InkPlane plane, PlaneHit hit, boolean viewingFromBack) {
         float u = hit.u();
         float v = hit.v();
-        ribbon(builder, matrix, plane, u - CURSOR_SIZE, v, u + CURSOR_SIZE, v, 0.012F, 20, 90, 210, 220);
-        ribbon(builder, matrix, plane, u, v - CURSOR_SIZE, u, v + CURSOR_SIZE, 0.012F, 20, 90, 210, 220);
+        ribbon(builder, matrix, plane, u - CURSOR_SIZE, v, u + CURSOR_SIZE, v, 0.012F, viewingFromBack, 20, 90, 210, 220);
+        ribbon(builder, matrix, plane, u, v - CURSOR_SIZE, u, v + CURSOR_SIZE, 0.012F, viewingFromBack, 20, 90, 210, 220);
     }
 
     private void ribbon(BufferBuilder builder, Matrix4f matrix, InkPlane plane,
                         float au, float av, float bu, float bv, float width,
-                        int red, int green, int blue, int alpha) {
+                        boolean viewingFromBack, int red, int green, int blue, int alpha) {
         float du = bu - au;
         float dv = bv - av;
         float length = (float) Math.sqrt(du * du + dv * dv);
         if (length < 0.0001F) {
-            disk(builder, matrix, plane, au, av, width * 0.5F, red, green, blue, alpha);
+            disk(builder, matrix, plane, au, av, width * 0.5F, viewingFromBack, red, green, blue, alpha);
             return;
         }
 
@@ -196,11 +204,12 @@ public final class InkCircleRenderer {
             au - ou, av - ov,
             bu - ou, bv - ov,
             bu + ou, bv + ov,
-            red, green, blue, alpha);
+            viewingFromBack, red, green, blue, alpha);
     }
 
     private void disk(BufferBuilder builder, Matrix4f matrix, InkPlane plane,
-                      float u, float v, float radius, int red, int green, int blue, int alpha) {
+                      float u, float v, float radius, boolean viewingFromBack,
+                      int red, int green, int blue, int alpha) {
         int segments = 18;
         for (int i = 0; i < segments; i++) {
             double a0 = Math.PI * 2.0D * i / segments;
@@ -211,25 +220,26 @@ public final class InkCircleRenderer {
                 u + (float) Math.cos(a0) * radius, v + (float) Math.sin(a0) * radius,
                 u + (float) Math.cos(mid) * radius, v + (float) Math.sin(mid) * radius,
                 u + (float) Math.cos(a1) * radius, v + (float) Math.sin(a1) * radius,
-                red, green, blue, alpha);
+                viewingFromBack, red, green, blue, alpha);
         }
     }
 
     private void quad(BufferBuilder builder, Matrix4f matrix, InkPlane plane,
                       float u1, float v1, float u2, float v2, float u3, float v3, float u4, float v4,
-                      int red, int green, int blue, int alpha) {
-        vertex(builder, matrix, plane, u1, v1, red, green, blue, alpha);
-        vertex(builder, matrix, plane, u2, v2, red, green, blue, alpha);
-        vertex(builder, matrix, plane, u3, v3, red, green, blue, alpha);
-        vertex(builder, matrix, plane, u4, v4, red, green, blue, alpha);
+                      boolean viewingFromBack, int red, int green, int blue, int alpha) {
+        vertex(builder, matrix, plane, u1, v1, viewingFromBack, red, green, blue, alpha);
+        vertex(builder, matrix, plane, u2, v2, viewingFromBack, red, green, blue, alpha);
+        vertex(builder, matrix, plane, u3, v3, viewingFromBack, red, green, blue, alpha);
+        vertex(builder, matrix, plane, u4, v4, viewingFromBack, red, green, blue, alpha);
     }
 
     private void vertex(BufferBuilder builder, Matrix4f matrix, InkPlane plane,
-                        float u, float v, int red, int green, int blue, int alpha) {
+                        float u, float v, boolean viewingFromBack, int red, int green, int blue, int alpha) {
         float r = plane.radius();
+        double layerOffset = viewingFromBack ? -STROKE_LAYER_OFFSET : STROKE_LAYER_OFFSET;
         Vec3 point = plane.right().scale(u * r)
             .add(plane.up().scale(v * r))
-            .add(plane.normal().scale(STROKE_LAYER_OFFSET));
+            .add(plane.normal().scale(layerOffset));
         builder.addVertex(matrix, (float) point.x, (float) point.y, (float) point.z).setColor(red, green, blue, alpha);
     }
 

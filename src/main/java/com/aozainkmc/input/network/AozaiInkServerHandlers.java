@@ -5,6 +5,7 @@ import com.aozainkmc.core.api.InkCandidate;
 import com.aozainkmc.core.api.InkRecognitionMode;
 import com.aozainkmc.core.api.InkRecognitionRequest;
 import com.aozainkmc.core.api.InkRecognitionResult;
+import com.aozainkmc.core.api.InkRecognizedEvent;
 import com.aozainkmc.core.api.InkSource;
 import com.aozainkmc.core.api.InkTrace;
 import com.aozainkmc.core.recognizer.AozaiInkRecognitionExecutor;
@@ -188,8 +189,22 @@ public final class AozaiInkServerHandlers {
         if (!player.getInventory().add(stack)) {
             player.drop(stack, false);
         }
-        player.sendSystemMessage(Component.literal("[AozaiInk] 成符: " + result.type().displayName()
-            + " [" + result.slot1() + ", " + result.slot2() + ", " + result.slot3() + "]"));
+        player.displayClientMessage(Component.literal("成符: " + formatGlyphs(result.slot1(), result.slot2(), result.slot3())), true);
+    }
+
+    private static String formatGlyphs(String... glyphs) {
+        StringBuilder builder = new StringBuilder();
+        for (String glyph : glyphs) {
+            String normalized = normalize(glyph);
+            if (normalized.isEmpty()) {
+                continue;
+            }
+            if (builder.length() > 0) {
+                builder.append(" / ");
+            }
+            builder.append(normalized);
+        }
+        return builder.length() == 0 ? "空符" : builder.toString();
     }
 
     private static void embedScore(ItemStack stack, int slot, InkRecognitionResult result) {
@@ -324,24 +339,26 @@ public final class AozaiInkServerHandlers {
             player.displayClientMessage(Component.literal("[AozaiInk] 临时施法未生效"), true);
             return;
         }
-        InkRecognitionResult paperResult = normalizePaperResult(result);
-        if (!PAPER_DIGITS.contains(paperResult.topGlyph())) {
-            player.displayClientMessage(Component.literal("[AozaiInk] 白纸指定技只接受一至九"), true);
-            return;
-        }
         ItemStack mainHand = player.getMainHandItem();
         if (!mainHand.is(Items.PAPER)) {
             player.displayClientMessage(Component.literal("[AozaiInk] 主手需持纸"), true);
             return;
         }
+        mainHand.shrink(1);
+        InkRecognitionResult paperResult = normalizePaperResult(result);
+        if (!PAPER_DIGITS.contains(paperResult.topGlyph())) {
+            player.displayClientMessage(Component.literal("[AozaiInk] 白纸指定技只接受一至九"), true);
+            return;
+        }
         try {
-            AozaiInkCoreApi.recognizer().broadcast(paperResult, source, player);
-            mainHand.shrink(1);
-            player.displayClientMessage(
-                Component.literal("临时施法: " + paperResult.topGlyph()
-                    + " " + Math.round(paperResult.confidence() * 1000f) / 10f + "%"),
-                true
-            );
+            InkRecognizedEvent event = AozaiInkCoreApi.recognizer().broadcast(paperResult, source, player);
+            if (event != null) {
+                player.displayClientMessage(
+                    Component.literal("临时施法: " + paperResult.topGlyph()
+                        + " " + Math.round(paperResult.confidence() * 1000f) / 10f + "%"),
+                    true
+                );
+            }
         } catch (Exception e) {
             AozaiInkInput.LOGGER.warn("Paper cast broadcast failed", e);
             player.displayClientMessage(Component.literal("[AozaiInk] 施法失败"), true);
