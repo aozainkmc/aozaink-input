@@ -9,6 +9,8 @@ import com.aozainkmc.input.item.AozaiInkInputRecipes;
 import com.aozainkmc.input.network.AozaiInkNetworking;
 import com.mojang.logging.LogUtils;
 import java.util.List;
+import java.util.LinkedHashSet;
+import com.aozainkmc.input.api.MoluMenuRegistry;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.neoforge.common.NeoForge;
@@ -24,9 +26,14 @@ public final class AozaiInkInput {
     public static final List<String> TALISMAN_GLYPHS = List.of(
         "一", "二", "三", "四", "五", "六", "七", "八", "九",
         "刻",
-        "镇", "封", "退", "引", "火", "雷", "护", "净", "斩", "明", "吸", "魄",
         "强", "续", "广", "穿"
     );
+
+    public static List<String> talismanGlyphs() {
+        LinkedHashSet<String> glyphs = new LinkedHashSet<>(TALISMAN_GLYPHS);
+        MoluMenuRegistry.glyphs().forEach(entry -> glyphs.add(entry.glyph()));
+        return List.copyOf(glyphs);
+    }
 
     public AozaiInkInput(IEventBus modBus) {
         AozaiInkCoreApi.registerInput(SOURCE_TRAJECTORY, EngineType.ONLINE_TRAJECTORY);

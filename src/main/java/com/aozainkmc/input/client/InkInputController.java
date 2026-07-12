@@ -5,6 +5,7 @@ import com.aozainkmc.core.api.InkRecognitionRequest;
 import com.aozainkmc.input.AozaiInkInput;
 import com.aozainkmc.input.network.AozaiInkNetworking;
 import com.aozainkmc.input.network.CastPaperPayload;
+import com.aozainkmc.input.network.PreviewQuickCastPayload;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -41,6 +42,7 @@ public final class InkInputController {
     private static boolean recognizedSinceChange;
     private static final EngineType CURRENT_ENGINE_TYPE = EngineType.ONLINE_TRAJECTORY;
     private static long lastPenUpTimeMs;
+    private static long revisionCounter = System.currentTimeMillis();
 
     private static InkPlane closingPlane;
     private static List<InkStroke> closingStrokes;
@@ -125,6 +127,10 @@ public final class InkInputController {
 
     public static void resetSession() { close(); }
 
+    public static void completeCandidateSelection() {
+        if (active) startClosing();
+    }
+
     public static void togglePaperCasting(Minecraft minecraft, LocalPlayer player) {
         if (active) {
             finishAndClose(minecraft, player);
@@ -141,13 +147,16 @@ public final class InkInputController {
         active = true;
         openingStartTimeMs = System.currentTimeMillis();
         lastHeldItem = player.getMainHandItem().copy();
+        QuickCastCandidateClient.reset();
         clear();
         say(player, "白纸施写已展开：左键写，右键收束识别");
     }
 
     private static void finishAndClose(Minecraft minecraft, LocalPlayer player) {
         if (!active || plane == null) return;
-        finishStroke(true, minecraft);
+        // Final submission already performs authoritative recognition. Suppress the
+        // duplicate pen-up preview for this same last stroke while closing.
+        finishStroke(true, null);
         InkPlane submittedPlane = plane;
         boolean submittedFromBack = fromBack;
         List<InkStroke> submittedStrokes = strokesForSide(submittedFromBack);
@@ -169,13 +178,16 @@ public final class InkInputController {
             return;
         }
 
+        long finalRevision = ++revisionCounter;
+        QuickCastCandidateClient.expectRevision(finalRevision);
         startClosing();
 
         AozaiInkNetworking.sendCastPaper(new CastPaperPayload(
             request.trace(),
             request.source().sourceId(),
             request.source().powerMultiplier(),
-            request.ttlTicks()
+            request.ttlTicks(),
+            finalRevision
         ));
         say(player, "临时施写已提交");
     }
@@ -270,8 +282,27 @@ public final class InkInputController {
             lastPenUpTimeMs = System.currentTimeMillis();
             autoRecognizePending = true;
             recognizedSinceChange = false;
+            requestCandidates(minecraft);
         }
         currentStroke = null;
+    }
+
+    private static void requestCandidates(Minecraft minecraft) {
+        if (minecraft == null || !active || plane == null || STROKES.isEmpty()) return;
+        List<InkStroke> submittedStrokes = strokesForSide(fromBack);
+        if (submittedStrokes.isEmpty()) return;
+        try {
+            InkRecognitionRequest request = ClassicSubmissionHelper.buildRequest(
+                submittedStrokes, fromBack, CURRENT_ENGINE_TYPE);
+            long revision = ++revisionCounter;
+            QuickCastCandidateClient.expectRevision(revision);
+            AozaiInkNetworking.sendPreviewQuickCast(new PreviewQuickCastPayload(
+                request.trace(), request.source().sourceId(), request.source().powerMultiplier(),
+                request.ttlTicks(), revision));
+            recognizedSinceChange = true;
+        } catch (Exception exception) {
+            AozaiInkInput.LOGGER.debug("Quick-cast preview request failed", exception);
+        }
     }
 
     private static float confirmProgress() {

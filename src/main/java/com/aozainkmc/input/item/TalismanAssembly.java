@@ -1,5 +1,6 @@
 package com.aozainkmc.input.item;
 
+import com.aozainkmc.input.api.MoluMenuRegistry;
 import java.util.Set;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
@@ -42,7 +43,7 @@ public final class TalismanAssembly {
         slot2 = normalize(slot2);
         slot3 = normalize(slot3);
 
-        if (isDigit(slot1) && isSkill(slot2) && slot3.isEmpty()) {
+        if (isDigit(slot1) && isBindableGlyph(slot2) && slot3.isEmpty()) {
             return new Result(Type.SPECIFIED, slot1, slot2, slot3);
         }
         if ("刻".equals(slot1) || "刻".equals(slot2) || "刻".equals(slot3)) {
@@ -142,6 +143,10 @@ public final class TalismanAssembly {
 
     private static boolean isSkill(String glyph) {
         return SKILL_GLYPHS.contains(glyph);
+    }
+
+    private static boolean isBindableGlyph(String glyph) {
+        return isSkill(glyph) || !MoluMenuRegistry.ownerOf(glyph).isBlank();
     }
 
     private static boolean isModifier(String glyph) {

@@ -15,6 +15,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -24,7 +27,13 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 
 public final class TalismanWritingScreen extends Screen {
-    private static final long AUTO_RECOGNIZE_MS = 700L;
+    private static final ExecutorService PREVIEW_EXECUTOR = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "AozaiInk-talisman-preview");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private static final long UI_ANIMATION_NANOS = 280_000_000L;
+    private static final float UI_MIN_SCALE = 0.08F;
     private static final int SLOT_COUNT = 3;
     private static final int SLOT_SIZE = 118;
     private static final int MODIFIER_SLOT = 2;
@@ -50,6 +59,11 @@ public final class TalismanWritingScreen extends Screen {
     private int panelY;
     private int activeSlot = -1;
     private String status = "";
+    private long openingStartNanos;
+    private long closingStartNanos;
+    private boolean closing;
+    private boolean submitted;
+    private boolean cameraReturnStarted;
 
     public TalismanWritingScreen(BlockPos blockPos) {
         super(Component.literal("黄符"));
@@ -58,6 +72,7 @@ public final class TalismanWritingScreen extends Screen {
 
     @Override
     protected void init() {
+        if (openingStartNanos == 0L) openingStartNanos = System.nanoTime();
         int panelWidth = panelWidth();
         int panelHeight = panelHeight();
         panelX = (width - panelWidth) / 2;
@@ -73,16 +88,21 @@ public final class TalismanWritingScreen extends Screen {
 
     @Override
     public void tick() {
-        long now = System.currentTimeMillis();
-        for (SlotState slot : slots) {
-            if (slot.dirty && !slot.recognizing && slot.hasInk() && now - slot.lastInputMs >= AUTO_RECOGNIZE_MS) {
-                recognize(slot);
-            }
+        if (closing && !submitted && !cameraReturnStarted
+                && System.nanoTime() - closingStartNanos >= UI_ANIMATION_NANOS) {
+            cameraReturnStarted = true;
+            TalismanCameraTransition.beginClosing(false);
         }
     }
 
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+        if (submitted || cameraReturnStarted) return;
+        float scale = animationScale(System.nanoTime());
+        graphics.pose().pushPose();
+        graphics.pose().translate(width * 0.5F, height * 0.5F, 0.0F);
+        graphics.pose().scale(scale, scale, 1.0F);
+        graphics.pose().translate(-width * 0.5F, -height * 0.5F, 0.0F);
         graphics.fill(0, 0, width, height, 0x66000000);
         int panelWidth = panelWidth();
         int panelHeight = panelHeight();
@@ -117,10 +137,12 @@ public final class TalismanWritingScreen extends Screen {
         for (var renderable : renderables) {
             renderable.render(graphics, mouseX, mouseY, partialTick);
         }
+        graphics.pose().popPose();
     }
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (closing || animationScale(System.nanoTime()) < 0.999F) return true;
         if (button == 0) {
             int slot = slotAt(mouseX, mouseY);
             if (slot >= 0) {
@@ -134,6 +156,7 @@ public final class TalismanWritingScreen extends Screen {
 
     @Override
     public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (closing) return true;
         if (button == 0 && activeSlot >= 0) {
             slots[activeSlot].addPoint(normX(activeSlot, mouseX), normY(activeSlot, mouseY));
             return true;
@@ -143,12 +166,24 @@ public final class TalismanWritingScreen extends Screen {
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
+        if (closing) return true;
         if (button == 0 && activeSlot >= 0) {
-            slots[activeSlot].endStroke();
+            SlotState slot = slots[activeSlot];
+            slot.endStroke();
+            recognize(slot);
             activeSlot = -1;
             return true;
         }
         return super.mouseReleased(mouseX, mouseY, button);
+    }
+
+    @Override
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (closing) {
+            if (!TalismanCameraTransition.isActive() && minecraft != null) minecraft.setScreen(null);
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     @Override
@@ -163,6 +198,11 @@ public final class TalismanWritingScreen extends Screen {
     @Override
     public boolean isPauseScreen() {
         return false;
+    }
+
+    @Override
+    public void onClose() {
+        requestAnimatedClose(false);
     }
 
     private void finish() {
@@ -185,7 +225,30 @@ public final class TalismanWritingScreen extends Screen {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player == null) return;
         AozaiInkNetworking.sendSubmitTalisman(new SubmitTalismanPayload(blockPos, slots));
-        minecraft.setScreen(null);
+        requestAnimatedClose(true);
+    }
+
+    private void requestAnimatedClose(boolean submitted) {
+        if (closing) return;
+        closing = true;
+        this.submitted = submitted;
+        closingStartNanos = System.nanoTime();
+        activeSlot = -1;
+        if (submitted) {
+            cameraReturnStarted = true;
+            TalismanCameraTransition.beginClosing(true);
+        }
+    }
+
+    private float animationScale(long nowNanos) {
+        float progress;
+        if (closing) {
+            progress = 1.0F - clamp((nowNanos - closingStartNanos) / (float) UI_ANIMATION_NANOS);
+        } else {
+            progress = clamp((nowNanos - openingStartNanos) / (float) UI_ANIMATION_NANOS);
+        }
+        float eased = progress * progress * (3.0F - 2.0F * progress);
+        return UI_MIN_SCALE + (1.0F - UI_MIN_SCALE) * eased;
     }
 
     private void recognize(SlotState slot) {
@@ -196,13 +259,29 @@ public final class TalismanWritingScreen extends Screen {
             slot.dirty = false;
             return;
         }
-        try {
-            if (AozaiInkCoreApi.recognizer() == null) {
-                status = "core recognizer 不可用";
+        if (AozaiInkCoreApi.recognizer() == null) {
+            status = "core recognizer 不可用";
+            return;
+        }
+        long revision = slot.revision;
+        if (slot.pendingRevision == revision) return;
+        InkRecognitionRequest request = buildRequest(slot);
+        slot.recognizing = true;
+        slot.pendingRevision = revision;
+        CompletableFuture.supplyAsync(() -> {
+            try {
+                return AozaiInkCoreApi.recognizer().recognize(request);
+            } catch (Exception exception) {
+                throw new java.util.concurrent.CompletionException(exception);
+            }
+        }, PREVIEW_EXECUTOR).whenComplete((result, error) -> Minecraft.getInstance().execute(() -> {
+            if (slot.revision != revision || slot.pendingRevision != revision) return;
+            slot.recognizing = false;
+            if (error != null) {
+                AozaiInkInput.LOGGER.warn("Yellow talisman slot recognition failed", error);
+                status = "识别异常: " + error.getClass().getSimpleName();
                 return;
             }
-            slot.recognizing = true;
-            InkRecognitionResult result = AozaiInkCoreApi.recognizer().recognize(buildRequest(slot));
             slot.recognizedGlyph = result.topGlyph();
             slot.confidence = result.confidence();
             slot.simplifiedStrokeCount = result.simplifiedStrokeCount();
@@ -210,12 +289,7 @@ public final class TalismanWritingScreen extends Screen {
             status = slot.recognizedGlyph.isEmpty()
                 ? "未识别"
                 : "识别 " + slot.recognizedGlyph + " " + Math.round(slot.confidence * 100.0f) + "%";
-        } catch (Exception e) {
-            AozaiInkInput.LOGGER.warn("Yellow talisman slot recognition failed", e);
-            status = "识别异常: " + e.getClass().getSimpleName();
-        } finally {
-            slot.recognizing = false;
-        }
+        }));
     }
 
     private InkRecognitionRequest buildRequest(SlotState slot) {
@@ -231,7 +305,7 @@ public final class TalismanWritingScreen extends Screen {
             new InkTrace(strokes),
             null,
             InkRecognitionMode.ONLINE,
-            AozaiInkInput.TALISMAN_GLYPHS,
+            AozaiInkInput.talismanGlyphs(),
             20L * 60L * 10L,
             new InkSource(AozaiInkInput.SOURCE_TRAJECTORY, 1.0f, "yellow_talisman", 0, Collections.emptyMap())
         );
@@ -419,7 +493,8 @@ public final class TalismanWritingScreen extends Screen {
         private String recognizedGlyph;
         private float confidence;
         private int simplifiedStrokeCount;
-        private long lastInputMs;
+        private long revision;
+        private long pendingRevision = -1L;
 
         private boolean hasInk() {
             for (List<DrawPoint> stroke : strokes) {
@@ -440,16 +515,15 @@ public final class TalismanWritingScreen extends Screen {
             if (currentStroke.isEmpty() || currentStroke.get(currentStroke.size() - 1).distanceSquared(next) > 0.00001f) {
                 currentStroke.add(next);
                 dirty = true;
+                revision++;
                 recognizedGlyph = null;
                 confidence = 0.0f;
                 simplifiedStrokeCount = 0;
-                lastInputMs = next.timeMs;
             }
         }
 
         private void endStroke() {
             currentStroke = null;
-            lastInputMs = System.currentTimeMillis();
         }
 
         private void clear() {
@@ -460,7 +534,8 @@ public final class TalismanWritingScreen extends Screen {
             recognizedGlyph = null;
             confidence = 0.0f;
             simplifiedStrokeCount = 0;
-            lastInputMs = 0L;
+            revision++;
+            pendingRevision = -1L;
         }
 
         private int strokeCount() {

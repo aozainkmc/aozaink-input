@@ -17,7 +17,9 @@ import net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
+import net.neoforged.neoforge.client.event.RenderHandEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import org.lwjgl.glfw.GLFW;
 
 @EventBusSubscriber(modid = AozaiInkInput.MOD_ID, value = Dist.CLIENT)
 public final class AozaiInkClientEvents {
@@ -26,19 +28,24 @@ public final class AozaiInkClientEvents {
 
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
-        InkInputController.tick(Minecraft.getInstance());
+        Minecraft minecraft = Minecraft.getInstance();
+        InkInputController.tick(minecraft);
+        QuickCastCandidateClient.tick(minecraft);
+        BindingRitualCameraTransition.tick(minecraft);
+        TalismanCameraTransition.tick(minecraft);
     }
 
     @SubscribeEvent
     public static void onRenderLevel(RenderLevelStageEvent event) {
         InkInputController.render(event);
+        TalismanFormationRenderer.render(event);
     }
 
     @SubscribeEvent
     public static void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
         if (event.getSide() != LogicalSide.CLIENT || event.getHand() != InteractionHand.MAIN_HAND) return;
         if (event.getLevel().getBlockState(event.getPos()).is(AozaiInkBlocks.YELLOW_TALISMAN.get())) {
-            Minecraft.getInstance().setScreen(new TalismanWritingScreen(event.getPos()));
+            TalismanCameraTransition.start(Minecraft.getInstance(), event.getPos());
             event.setCancellationResult(InteractionResult.SUCCESS);
             event.setCanceled(true);
             return;
@@ -67,8 +74,28 @@ public final class AozaiInkClientEvents {
     }
 
     @SubscribeEvent
+    public static void onRenderHand(RenderHandEvent event) {
+        if (BindingRitualCameraTransition.isActive() || TalismanCameraTransition.isActive()) event.setCanceled(true);
+    }
+
+    @SubscribeEvent
+    public static void onKey(InputEvent.Key event) {
+        if (event.getAction() != GLFW.GLFW_PRESS) return;
+        int index = switch (event.getKey()) {
+            case GLFW.GLFW_KEY_1, GLFW.GLFW_KEY_KP_1 -> 0;
+            case GLFW.GLFW_KEY_2, GLFW.GLFW_KEY_KP_2 -> 1;
+            case GLFW.GLFW_KEY_3, GLFW.GLFW_KEY_KP_3 -> 2;
+            default -> -1;
+        };
+        if (index >= 0) QuickCastCandidateClient.select(index);
+    }
+
+    @SubscribeEvent
     public static void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {
         InkInputController.resetSession();
+        QuickCastCandidateClient.reset();
+        BindingRitualCameraTransition.reset();
+        TalismanCameraTransition.reset();
     }
 
     private static boolean togglePaperCasting(ItemStack stack) {

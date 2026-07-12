@@ -12,6 +12,7 @@ import com.aozainkmc.core.recognizer.AozaiInkRecognitionExecutor;
 import com.aozainkmc.input.AozaiInkInput;
 import com.aozainkmc.input.block.AozaiInkBlocks;
 import com.aozainkmc.input.effect.TailModifierFailureEffect;
+import com.aozainkmc.input.effect.TalismanFormationEffect;
 import com.aozainkmc.input.item.AozaiInkItems;
 import com.aozainkmc.input.item.TalismanAssembly;
 import com.aozainkmc.input.scoring.TailModifierStability;
@@ -47,7 +48,6 @@ public final class AozaiInkServerHandlers {
     private static final double MAX_PAPER_DISTANCE_SQR = 10.0 * 10.0;
     private static final long DEFAULT_TTL_TICKS = 20L * 60L * 10L;
     private static final Set<String> TAIL_MODIFIERS = Set.of("强", "续", "广", "穿");
-    private static final List<String> PAPER_DIGITS = List.of("一", "二", "三", "四", "五", "六", "七", "八", "九");
 
     private AozaiInkServerHandlers() {}
 
@@ -106,7 +106,7 @@ public final class AozaiInkServerHandlers {
                 slot.trace(),
                 null,
                 InkRecognitionMode.ONLINE,
-                AozaiInkInput.TALISMAN_GLYPHS,
+                AozaiInkInput.talismanGlyphs(),
                 DEFAULT_TTL_TICKS,
                 InkSource.simple(AozaiInkInput.SOURCE_TRAJECTORY)
             );
@@ -167,6 +167,7 @@ public final class AozaiInkServerHandlers {
                 player.serverLevel().setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
                 player.displayClientMessage(Component.literal("尾修失败，符力暴乱"), true);
                 InputSignals.tailModifierChaos(player, false, false, false);
+                TalismanFormationEffect.startChaos(player, pos);
                 TailModifierFailureEffect.start(player, pos);
                 return;
             }
@@ -186,9 +187,7 @@ public final class AozaiInkServerHandlers {
         triggerTalismanCreated(player, result, stack);
 
         player.serverLevel().setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
-        if (!player.getInventory().add(stack)) {
-            player.drop(stack, false);
-        }
+        TalismanFormationEffect.startSuccess(player, pos, stack);
         player.displayClientMessage(Component.literal("成符: " + formatGlyphs(result.slot1(), result.slot2(), result.slot3())), true);
     }
 
@@ -306,6 +305,8 @@ public final class AozaiInkServerHandlers {
             player.displayClientMessage(Component.literal("[AozaiInk] 笔迹数据过大"), true);
             return;
         }
+        QuickCastSessionManager.beginRevision(player, payload.revision());
+        AozaiInkRecognitionExecutor.get().supersedeLatest(player, payload.revision());
 
         InkSource source = new InkSource(
             payload.sourceId(),
@@ -318,7 +319,7 @@ public final class AozaiInkServerHandlers {
             trace,
             null,
             InkRecognitionMode.ONLINE,
-            PAPER_DIGITS,
+            QuickCastSessionManager.recognitionGlyphs(),
             payload.ttlTicks() > 0 ? payload.ttlTicks() : DEFAULT_TTL_TICKS,
             source
         );
@@ -326,12 +327,38 @@ public final class AozaiInkServerHandlers {
         AozaiInkRecognitionExecutor.get().submit(
             player,
             request,
-            result -> finalizePaperCast(player, result, source),
+            result -> finalizePaperCast(player, result, source, payload.revision()),
             reason -> player.displayClientMessage(Component.literal("[AozaiInk] 识别失败: " + reason), true)
         );
     }
 
-    private static void finalizePaperCast(ServerPlayer player, InkRecognitionResult result, InkSource source) {
+    public static void previewQuickCast(ServerPlayer player, PreviewQuickCastPayload payload) {
+        if (!player.getMainHandItem().is(Items.PAPER)) return;
+        if (!AozaiInkRecognitionExecutor.validateTrace(payload.trace())) return;
+        if (!QuickCastSessionManager.beginRevision(player, payload.revision())) return;
+        InkSource source = new InkSource(
+            payload.sourceId(), payload.powerMultiplier(), "default", 0.0f, Map.of());
+        InkRecognitionRequest request = new InkRecognitionRequest(
+            payload.trace(), null, InkRecognitionMode.ONLINE,
+            QuickCastSessionManager.recognitionGlyphs(),
+            payload.ttlTicks() > 0 ? payload.ttlTicks() : DEFAULT_TTL_TICKS,
+            source);
+        AozaiInkRecognitionExecutor.get().submitLatest(
+            player,
+            request,
+            payload.revision(),
+            result -> QuickCastSessionManager.offer(player, result, source, payload.revision()),
+            reason -> { }
+        );
+    }
+
+    public static void selectQuickCastCandidate(ServerPlayer player, SelectQuickCastCandidatePayload payload) {
+        QuickCastSessionManager.select(player, payload);
+    }
+
+    private static void finalizePaperCast(
+        ServerPlayer player, InkRecognitionResult result, InkSource source, long revision
+    ) {
         if (player.isRemoved() || player.connection == null) {
             return;
         }
@@ -339,67 +366,15 @@ public final class AozaiInkServerHandlers {
             player.displayClientMessage(Component.literal("[AozaiInk] 临时施法未生效"), true);
             return;
         }
-        ItemStack mainHand = player.getMainHandItem();
-        if (!mainHand.is(Items.PAPER)) {
+        if (!player.getMainHandItem().is(Items.PAPER)) {
             player.displayClientMessage(Component.literal("[AozaiInk] 主手需持纸"), true);
             return;
         }
-        mainHand.shrink(1);
-        InkRecognitionResult paperResult = normalizePaperResult(result);
-        if (!PAPER_DIGITS.contains(paperResult.topGlyph())) {
-            player.displayClientMessage(Component.literal("[AozaiInk] 白纸指定技只接受一至九"), true);
-            return;
+        if (QuickCastSessionManager.DIGITS.contains(result.topGlyph())) {
+            QuickCastSessionManager.castLegacyDigit(player, result.topGlyph(), result, source, revision);
+        } else {
+            QuickCastSessionManager.offer(player, result, source, revision);
         }
-        try {
-            InkRecognizedEvent event = AozaiInkCoreApi.recognizer().broadcast(paperResult, source, player);
-            if (event != null) {
-                player.displayClientMessage(
-                    Component.literal("临时施法: " + paperResult.topGlyph()
-                        + " " + Math.round(paperResult.confidence() * 1000f) / 10f + "%"),
-                    true
-                );
-            }
-        } catch (Exception e) {
-            AozaiInkInput.LOGGER.warn("Paper cast broadcast failed", e);
-            player.displayClientMessage(Component.literal("[AozaiInk] 施法失败"), true);
-        }
-    }
-
-    private static InkRecognitionResult normalizePaperResult(InkRecognitionResult result) {
-        String glyph = normalizePaperDigit(result);
-        if (glyph.equals(result.topGlyph())) {
-            return result;
-        }
-        List<InkCandidate> candidates = new ArrayList<>();
-        candidates.add(new InkCandidate(glyph, result.confidence()));
-        for (InkCandidate candidate : result.candidates()) {
-            if (!glyph.equals(candidate.word())) {
-                candidates.add(candidate);
-            }
-        }
-        return new InkRecognitionResult(
-            glyph,
-            result.confidence(),
-            candidates,
-            result.simplifiedStrokeCount(),
-            result.simplifiedPointCount(),
-            result.writingDurationMs()
-        );
-    }
-
-    private static String normalizePaperDigit(InkRecognitionResult result) {
-        String glyph = normalize(result.topGlyph());
-        int strokes = result.simplifiedStrokeCount();
-        if (strokes == 1) {
-            return "一";
-        }
-        if (strokes == 2 && (!PAPER_DIGITS.contains(glyph) || "三".equals(glyph))) {
-            return "二";
-        }
-        if (strokes == 3 && (!PAPER_DIGITS.contains(glyph) || "二".equals(glyph))) {
-            return "三";
-        }
-        return glyph;
     }
 
     private static String normalize(String glyph) {

@@ -1,5 +1,7 @@
 # aozaink-input
 
+开发工程名为 `aozaink-input`；面向玩家的发布产物名为 `molu-input`。
+
 官方样例输入模块。当前玩家可见入口有两条：黄符三格书写 UI，以及原版白纸触发的临时施写。它负责采集笔迹、提交识别，并在成符时做**客观评分 → 品质评级**写进黄符；不实现具体玩法效果（交给 gameplay）。
 
 ## 职责
@@ -109,4 +111,4 @@ dependencies {
 }
 ```
 
-只依赖 core，不依赖 gameplay 模块。
+只依赖 core，不依赖 gameplay 模块。Input 同时提供 Molu 共享交互层：指定符绑定、白纸快速吟唱解析、默认 M 菜单，以及供玩法模块注册字典说明和栏目数据的 `MoluMenuRegistry`。依赖方向始终是 gameplay → Input，不反向依赖。
