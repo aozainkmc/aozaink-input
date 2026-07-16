@@ -3,7 +3,6 @@ package com.aozainkmc.input.client;
 import com.aozainkmc.core.AozaiInkCoreApi;
 import com.aozainkmc.core.api.GlyphDescriber;
 import com.aozainkmc.core.api.InkPoint;
-import com.aozainkmc.core.api.InkRecognitionMode;
 import com.aozainkmc.core.api.InkRecognitionRequest;
 import com.aozainkmc.core.api.InkRecognitionResult;
 import com.aozainkmc.core.api.InkSource;
@@ -304,7 +303,6 @@ public final class TalismanWritingScreen extends Screen {
         return new InkRecognitionRequest(
             new InkTrace(strokes),
             null,
-            InkRecognitionMode.ONLINE,
             AozaiInkInput.talismanGlyphs(),
             20L * 60L * 10L,
             new InkSource(AozaiInkInput.SOURCE_TRAJECTORY, 1.0f, "yellow_talisman", 0, Collections.emptyMap())

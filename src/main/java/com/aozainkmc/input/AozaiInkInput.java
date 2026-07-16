@@ -1,7 +1,6 @@
 package com.aozainkmc.input;
 
 import com.aozainkmc.core.AozaiInkCoreApi;
-import com.aozainkmc.core.api.EngineType;
 import com.aozainkmc.input.block.AozaiInkBlocks;
 import com.aozainkmc.input.command.AozaiInputCommand;
 import com.aozainkmc.input.item.AozaiInkItems;
@@ -20,7 +19,6 @@ import org.slf4j.Logger;
 @Mod(AozaiInkInput.MOD_ID)
 public final class AozaiInkInput {
     public static final String MOD_ID = "aozaink_input";
-    public static final String SOURCE_IMAGE = "classic_taiji_image";
     public static final String SOURCE_TRAJECTORY = "classic_taiji_traj";
     public static final Logger LOGGER = LogUtils.getLogger();
     public static final List<String> TALISMAN_GLYPHS = List.of(
@@ -36,7 +34,6 @@ public final class AozaiInkInput {
     }
 
     public AozaiInkInput(IEventBus modBus) {
-        AozaiInkCoreApi.registerInput(SOURCE_TRAJECTORY, EngineType.ONLINE_TRAJECTORY);
         AozaiInkCoreApi.registerGlyphs(TALISMAN_GLYPHS);
 
         AozaiInkBlocks.register(modBus);

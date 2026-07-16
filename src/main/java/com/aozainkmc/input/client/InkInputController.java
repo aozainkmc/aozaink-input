@@ -1,6 +1,5 @@
 package com.aozainkmc.input.client;
 
-import com.aozainkmc.core.api.EngineType;
 import com.aozainkmc.core.api.InkRecognitionRequest;
 import com.aozainkmc.input.AozaiInkInput;
 import com.aozainkmc.input.network.AozaiInkNetworking;
@@ -40,7 +39,6 @@ public final class InkInputController {
     private static ItemStack lastHeldItem;
     private static boolean autoRecognizePending;
     private static boolean recognizedSinceChange;
-    private static final EngineType CURRENT_ENGINE_TYPE = EngineType.ONLINE_TRAJECTORY;
     private static long lastPenUpTimeMs;
     private static long revisionCounter = System.currentTimeMillis();
 
@@ -169,7 +167,7 @@ public final class InkInputController {
 
         InkRecognitionRequest request;
         try {
-            request = ClassicSubmissionHelper.buildRequest(submittedStrokes, submittedFromBack, CURRENT_ENGINE_TYPE);
+            request = ClassicSubmissionHelper.buildRequest(submittedStrokes, submittedFromBack);
         } catch (Exception e) {
             spawnFailParticles(submittedPlane);
             say(player, "识别请求生成失败: " + e.getClass().getSimpleName());
@@ -293,7 +291,7 @@ public final class InkInputController {
         if (submittedStrokes.isEmpty()) return;
         try {
             InkRecognitionRequest request = ClassicSubmissionHelper.buildRequest(
-                submittedStrokes, fromBack, CURRENT_ENGINE_TYPE);
+                submittedStrokes, fromBack);
             long revision = ++revisionCounter;
             QuickCastCandidateClient.expectRevision(revision);
             AozaiInkNetworking.sendPreviewQuickCast(new PreviewQuickCastPayload(

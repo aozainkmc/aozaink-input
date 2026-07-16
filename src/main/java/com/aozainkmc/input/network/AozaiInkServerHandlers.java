@@ -2,7 +2,6 @@ package com.aozainkmc.input.network;
 
 import com.aozainkmc.core.AozaiInkCoreApi;
 import com.aozainkmc.core.api.InkCandidate;
-import com.aozainkmc.core.api.InkRecognitionMode;
 import com.aozainkmc.core.api.InkRecognitionRequest;
 import com.aozainkmc.core.api.InkRecognitionResult;
 import com.aozainkmc.core.api.InkRecognizedEvent;
@@ -105,7 +104,6 @@ public final class AozaiInkServerHandlers {
             InkRecognitionRequest request = new InkRecognitionRequest(
                 slot.trace(),
                 null,
-                InkRecognitionMode.ONLINE,
                 AozaiInkInput.talismanGlyphs(),
                 DEFAULT_TTL_TICKS,
                 InkSource.simple(AozaiInkInput.SOURCE_TRAJECTORY)
@@ -318,7 +316,6 @@ public final class AozaiInkServerHandlers {
         InkRecognitionRequest request = new InkRecognitionRequest(
             trace,
             null,
-            InkRecognitionMode.ONLINE,
             QuickCastSessionManager.recognitionGlyphs(),
             payload.ttlTicks() > 0 ? payload.ttlTicks() : DEFAULT_TTL_TICKS,
             source
@@ -339,7 +336,7 @@ public final class AozaiInkServerHandlers {
         InkSource source = new InkSource(
             payload.sourceId(), payload.powerMultiplier(), "default", 0.0f, Map.of());
         InkRecognitionRequest request = new InkRecognitionRequest(
-            payload.trace(), null, InkRecognitionMode.ONLINE,
+            payload.trace(), null,
             QuickCastSessionManager.recognitionGlyphs(),
             payload.ttlTicks() > 0 ? payload.ttlTicks() : DEFAULT_TTL_TICKS,
             source);

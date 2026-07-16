@@ -1,18 +1,10 @@
 package com.aozainkmc.input.network;
 
 import com.aozainkmc.input.AozaiInkInput;
-import com.aozainkmc.input.client.TalismanFormationRenderer;
 import com.aozainkmc.input.api.MoluMenuRegistry;
 import com.aozainkmc.input.binding.QuickGlyphBinding;
-import com.aozainkmc.input.client.MoluMenuScreen;
-import com.aozainkmc.input.client.InputBindingRitualRenderer;
-import com.aozainkmc.input.client.BindingRitualCameraTransition;
-import com.aozainkmc.input.client.QuickCastCandidateClient;
 import java.util.ArrayList;
 import java.util.List;
-import net.minecraft.client.Minecraft;
-import net.neoforged.api.distmarker.Dist;
-import net.neoforged.fml.loading.FMLEnvironment;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.neoforge.network.PacketDistributor;
 import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
@@ -91,13 +83,11 @@ public final class AozaiInkNetworking {
     }
 
     private static void handleQuickCastCandidates(QuickCastCandidatesPayload payload, IPayloadContext context) {
-        if (FMLEnvironment.dist != Dist.CLIENT) return;
-        context.enqueueWork(() -> QuickCastCandidateClient.show(payload));
+        context.enqueueWork(() -> AozaiInkClientPayloadHandler.handleQuickCastCandidates(payload));
     }
 
     private static void handleTalismanFormation(TalismanFormationPayload payload, IPayloadContext context) {
-        if (FMLEnvironment.dist != Dist.CLIENT) return;
-        context.enqueueWork(() -> TalismanFormationRenderer.add(payload));
+        context.enqueueWork(() -> AozaiInkClientPayloadHandler.handleTalismanFormation(payload));
     }
 
     private static void handleMenuRequest(MoluMenuRequestPayload payload, IPayloadContext context) {
@@ -115,16 +105,11 @@ public final class AozaiInkNetworking {
     }
 
     private static void handleMenu(MoluMenuPayload payload, IPayloadContext context) {
-        if (FMLEnvironment.dist != Dist.CLIENT) return;
-        context.enqueueWork(() -> Minecraft.getInstance().setScreen(new MoluMenuScreen(payload)));
+        context.enqueueWork(() -> AozaiInkClientPayloadHandler.handleMenu(payload));
     }
 
     private static void handleBindingRitual(InputBindingRitualPayload payload, IPayloadContext context) {
-        if (FMLEnvironment.dist != Dist.CLIENT) return;
-        context.enqueueWork(() -> {
-            InputBindingRitualRenderer.add(payload);
-            BindingRitualCameraTransition.start(Minecraft.getInstance(), payload.playerId());
-        });
+        context.enqueueWork(() -> AozaiInkClientPayloadHandler.handleBindingRitual(payload));
     }
 
     public static void sendMenu(ServerPlayer player) {

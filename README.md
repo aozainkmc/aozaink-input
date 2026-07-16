@@ -63,7 +63,7 @@ int simplifiedStrokeCount;
 | 组合符 | 三格内包含至少一个技能字，可混入修饰字；不能包含数字或 `刻`；重复字、广/穿同时出现等结构由玩法侧判废 |
 | 废符 | 其他格式 |
 
-当前技能字集合（12 玩法字）：`镇 封 退 引 火 雷 护 净 斩 明 吸 魄`，外加功能字 `刻` 与数字 `一..九`（暂兼容到 `1..9`）。修饰字（4 个）：`强 续 广 穿`。core 通过 `registerInput(sourceId, EngineType)` 记录输入源所需的在线/离线引擎类型。
+当前技能字集合（12 玩法字）：`镇 封 退 引 火 雷 护 净 斩 明 吸 魄`，外加功能字 `刻` 与数字 `一..九`（暂兼容到 `1..9`）。修饰字（4 个）：`强 续 广 穿`。Input 只提交实际轨迹，Core 自动调用统一模型的轨迹入口。
 
 ## 黄符方块和物品
 
@@ -82,21 +82,19 @@ int simplifiedStrokeCount;
 
 - 主手拿原版纸右键：在玩家面前展开一张放大的白纸书写面。
 - 左键按住/拖动：在白纸面上写字，保留多 stroke 结构。
-- 再次右键：收束白纸并提交一次在线轨迹识别。
+- 再次右键：收束白纸并提交一次轨迹识别。
 - 当前单人版本识别后只广播/附着 `InkMark` 并显示 top1，不产生伤害、状态或方块效果。
-- 白纸临时施写固定使用 `ONLINE_TRAJECTORY` 和基础强度；法杖 tier 不参与普通玩家入口。
+- 白纸临时施写固定提交轨迹和基础强度；法杖 tier 不参与普通玩家入口。
 
 ## 与 core 的交互
 
 ```java
-AozaiInkCoreApi.registerInput(SOURCE_TRAJECTORY, EngineType.ONLINE_TRAJECTORY);
 AozaiInkCoreApi.registerGlyphs(TALISMAN_GLYPHS);
 ```
 
-- `SOURCE_TRAJECTORY = "classic_taiji_traj"` 注册为在线轨迹引擎。
-- 黄符三格和原版白纸临时施写都使用这个 sourceId 和引擎类型。
-- 识别请求构造为 `InkRecognitionRequest { trace, null, ONLINE, [], ttl, source }`。
-- core 根据 sourceId 路由到 `OnnxTrajectoryOcrEngine`。
+- 黄符三格和原版白纸临时施写都使用 `SOURCE_TRAJECTORY = "classic_taiji_traj"` 作为来源元数据。
+- 识别请求构造为 `InkRecognitionRequest { trace, null, candidates, ttl, source }`。
+- Core 根据请求实际载荷自动使用统一 ONNX 的轨迹输出；`sourceId` 不再承担引擎路由职责。
 
 ## 开发模式
 
