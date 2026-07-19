@@ -1,11 +1,15 @@
 package com.aozainkmc.input.client;
 
+import com.aozainkmc.core.AozaiInkCoreApi;
+import com.aozainkmc.core.api.GlyphDescriber;
+import com.aozainkmc.input.AozaiInkInput;
 import com.aozainkmc.input.network.ClearQuickBindingPayload;
 import com.aozainkmc.input.network.MoluMenuPayload;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -32,12 +36,15 @@ public final class MoluMenuScreen extends Screen {
     private static final int SLOT_COUNT = 9;
     private static final float BRIEF_TEXT_SCALE = 1.15f;
     private static final float DETAIL_TEXT_SCALE = 0.82f;
+    private static final Set<String> TAIL_MODIFIERS = Set.of("强", "续", "广", "穿");
 
     private final Map<Integer, MoluMenuPayload.BindingEntry> bindings = new LinkedHashMap<>();
     private final List<MoluMenuPayload.GlyphEntry> glyphs;
     private final List<MoluMenuPayload.TabEntry> extensionTabs;
     private final List<String> tabLabels = new ArrayList<>();
+    private final List<String> comboGlyphs;
     private final int[] scrollOffsets;
+    private final String[] comboSlots = { "", "", "" };
     private int panelX;
     private int panelY;
     private int activeTab;
@@ -53,9 +60,12 @@ public final class MoluMenuScreen extends Screen {
         extensionTabs = List.copyOf(payload.tabs());
         tabLabels.add("快速吟唱");
         tabLabels.add("黄符字典");
+        tabLabels.add("技能表");
         for (MoluMenuPayload.TabEntry tab : extensionTabs) tabLabels.add(tab.label());
-        tabLabels.add("合成");
+        tabLabels.add("配方");
+        tabLabels.add("设置");
         scrollOffsets = new int[tabLabels.size()];
+        comboGlyphs = List.copyOf(AozaiInkInput.talismanGlyphs());
     }
 
     @Override
@@ -73,8 +83,10 @@ public final class MoluMenuScreen extends Screen {
         drawTabs(g, mouseX, mouseY);
         if (activeTab == 0) renderBindings(g);
         else if (activeTab == 1) renderCodex(g);
-        else if (activeTab == recipeTab()) renderRecipes(g);
-        else renderExtension(g, extensionTabs.get(activeTab - 2));
+        else if (activeTab == comboTabIndex()) renderComboWiki(g);
+        else if (activeTab == recipeTabIndex()) renderRecipes(g);
+        else if (activeTab == settingsTabIndex()) renderSettings(g, mouseX, mouseY);
+        else renderExtension(g, extensionTabs.get(activeTab - extensionTabStart()));
         drawBottomButtons(g, mouseX, mouseY);
     }
 
@@ -227,7 +239,9 @@ public final class MoluMenuScreen extends Screen {
 
     private void renderCopyRecipe(GuiGraphics g, int x, int y, int w) {
         int gridX = x + 26, gridY = y + 40, size = recipeSlotSize();
-        String[][] cells = {{"空符", "空符", "空符"}, {"空符", "成符", "空符"}, {"空符", "朱砂", "空符"}};
+        String[][] cells = {{"空白 黄符", "空白 黄符", "空白 黄符"},
+                            {"空白 黄符", "成符", "空白 黄符"},
+                            {"空白 黄符", "红色 染料", "空白 黄符"}};
         for (int row = 0; row < 3; row++) {
             for (int column = 0; column < 3; column++) {
                 drawRecipeSlot(g, gridX + column * (size + 5), gridY + row * (size + 5),
@@ -242,6 +256,75 @@ public final class MoluMenuScreen extends Screen {
             "中心放已写黄符，下中放红色染料。",
             "其余7格放空白黄符。",
             "产出2张相同成符。"));
+    }
+
+    private void renderComboWiki(GuiGraphics g) {
+        int x = contentX(), y = contentY(), w = contentW();
+        int slotSize = recipeSlotSize();
+        int pad = 8;
+        int plusW = font.width("+");
+        int startX = x;
+        int slotY = y + 4;
+
+        for (int i = 0; i < 3; i++) {
+            int slotX = startX + i * (slotSize + plusW + pad * 2);
+            drawRecipeSlot(g, slotX, slotY, slotSize,
+                comboSlots[i].isEmpty() ? "空" : comboSlots[i], PAPER_TX);
+            if (i < 2) {
+                int plusX = slotX + slotSize + pad;
+                drawCenteredInBox(g, "+", plusX, slotY, plusW, slotSize, PAPER_TX, 1.2f);
+            }
+        }
+
+        int textY = slotY + slotSize + 12;
+        int textH = 60;
+        List<String> lines = buildComboDescription();
+        drawInfoLinesClipped(g, x, textY, w - 20, textH, lines);
+
+        int[] grid = comboGridRect();
+        int gx = grid[0], gy = grid[1], cols = grid[2], size = grid[3];
+        int visibleRows = grid[4], offset = grid[5];
+        for (int i = offset * cols; i < comboGlyphs.size() && i < (offset + visibleRows) * cols; i++) {
+            int displayRow = i / cols - offset;
+            int col = i % cols;
+            drawRecipeSlot(g, gx + col * size, gy + displayRow * size, size - 4, comboGlyphs.get(i), PAPER_TX);
+        }
+        drawScrollBar(g, x, gy, w, visibleRows * size,
+            (comboGlyphs.size() + cols - 1) / cols, visibleRows, offset);
+    }
+
+    private List<String> buildComboDescription() {
+        boolean invalidTail = !comboSlots[2].isEmpty() && !TAIL_MODIFIERS.contains(comboSlots[2]);
+        if (invalidTail) {
+            return List.of("尾修槽只接受 强 / 续 / 广 / 穿");
+        }
+        if (comboSlots[0].isEmpty() && comboSlots[1].isEmpty() && comboSlots[2].isEmpty()) {
+            return List.of("点击下方字填入槽位，查看组合效果");
+        }
+        var describer = AozaiInkCoreApi.getService(GlyphDescriber.class);
+        if (describer == null) return List.of("效果服务未加载");
+        return describer.describe(List.of(comboSlots[0], comboSlots[1], comboSlots[2]));
+    }
+
+    private void renderSettings(GuiGraphics g, int mouseX, int mouseY) {
+        int x = contentX() + 16;
+        int y = contentY() + 8;
+        int labelW = Math.max(menuWidth("上下文提示:"), menuWidth("效果描述:"));
+
+        boolean enabled = AozaiInkClientConfig.hintsEnabled();
+        int[] hintsBtn = hintsToggleRect();
+        drawMenuString(g, "上下文提示:", x, y + (buttonH() - font.lineHeight) / 2, PAPER_TX);
+        drawButton(g, hintsBtn, enabled ? "开" : "关",
+            enabled ? PAPER_DK : RED, mouseX, mouseY);
+
+        int[] detailBtn = detailToggleRect();
+        drawMenuString(g, "效果描述:", x, detailBtn[1] + (buttonH() - font.lineHeight) / 2, PAPER_TX);
+        drawButton(g, detailBtn, detailed ? "详细" : "简略",
+            PAPER_DK, mouseX, mouseY);
+
+        drawInfoLines(g, x, detailBtn[1] + detailBtn[3] + 16, contentW() - 32, List.of(
+            "上下文提示：开启后，对准工作台或已放置黄符时会显示操作提示。",
+            "效果描述：切换黄符字典与快速吟唱中的效果描述详细程度。"));
     }
 
     private void drawFrame(GuiGraphics g) {
@@ -270,8 +353,10 @@ public final class MoluMenuScreen extends Screen {
     private String titleText() {
         if (activeTab == 0) return "快速吟唱设置";
         if (activeTab == 1) return "黄符字典";
-        if (activeTab == recipeTab()) return "合成";
-        return extensionTabs.get(activeTab - 2).title();
+        if (activeTab == comboTabIndex()) return "技能表";
+        if (activeTab == recipeTabIndex()) return "配方";
+        if (activeTab == settingsTabIndex()) return "设置";
+        return extensionTabs.get(activeTab - extensionTabStart()).title();
     }
 
     private void drawTabs(GuiGraphics g, int mouseX, int mouseY) {
@@ -296,12 +381,10 @@ public final class MoluMenuScreen extends Screen {
     private void drawBottomButtons(GuiGraphics g, int mouseX, int mouseY) {
         if (activeTab == 0) {
             drawButton(g, clearAllRect(), "全部清空", PAPER_DK, mouseX, mouseY);
-        } else if (activeTab == recipeTab()) {
+        } else if (activeTab == recipeTabIndex()) {
             drawButton(g, clearAllRect(), recipePage == 0 ? "拓印配方" : "空符配方",
                 PAPER_DK, mouseX, mouseY);
         }
-        drawButton(g, toggleDetailRect(), detailed ? "简略信息" : "详细信息",
-            PAPER_DK, mouseX, mouseY);
         drawButton(g, backRect(), "返回", PAPER_DK, mouseX, mouseY);
     }
 
@@ -358,13 +441,55 @@ public final class MoluMenuScreen extends Screen {
         g.fill(x, y, x + size, y + size, 0x66302118);
         drawBorder(g, x, y, size, size, EDGE);
         drawBorder(g, x + 2, y + 2, size - 4, size - 4, 0x553B2D1B);
-        drawCenteredInBox(g, label, x, y, size, size, color, label.length() > 2 ? 0.75f : 1.0f);
+        String[] lines = label.split(" ");
+        float scale = 0.9f;
+        int lineHeight = Math.max(6, Math.round(font.lineHeight * scale));
+        int totalH = lines.length * lineHeight;
+        int startY = y + (size - totalH) / 2;
+        for (int i = 0; i < lines.length; i++) {
+            drawCenteredInBox(g, lines[i], x, startY + i * lineHeight, size, lineHeight, color, scale);
+        }
     }
 
     private void drawInfoLines(GuiGraphics g, int x, int y, int maxWidth, List<String> lines) {
         int yy = y;
         for (String line : lines) {
             yy += drawWrappedString(g, line, x, yy, maxWidth, 3, PAPER_TX, 0.82f) + 6;
+        }
+    }
+
+    private void drawInfoLinesClipped(GuiGraphics g, int x, int y, int maxWidth, int maxHeight, List<String> lines) {
+        if (maxHeight <= 0) return;
+        int yy = y;
+        float scale = 0.82f;
+        int lineHeight = Math.max(6, Math.round(font.lineHeight * scale));
+        int gap = 6;
+        int available = Math.max(1, (int)(maxWidth / scale));
+        int remainingHeight = maxHeight;
+        outer:
+        for (String line : lines) {
+            if (remainingHeight < lineHeight) break;
+            String text = line;
+            while (!text.isEmpty() && remainingHeight >= lineHeight) {
+                boolean lastLine = remainingHeight < lineHeight * 2 + gap;
+                String value = font.plainSubstrByWidth(text, available);
+                if (value.isEmpty()) break;
+                text = text.substring(value.length());
+                if (lastLine && !text.isEmpty()) {
+                    value = font.plainSubstrByWidth(value,
+                        Math.max(1, available - menuWidth("..."))) + "...";
+                    text = "";
+                }
+                drawScaledText(g, value, x, yy, PAPER_TX, scale);
+                yy += lineHeight;
+                remainingHeight -= lineHeight;
+                if (!text.isEmpty()) {
+                    if (remainingHeight < lineHeight) break outer;
+                } else {
+                    yy += gap;
+                    remainingHeight -= gap;
+                }
+            }
         }
     }
 
@@ -480,10 +605,6 @@ public final class MoluMenuScreen extends Screen {
             onClose();
             return true;
         }
-        if (hit(mouseX, mouseY, toggleDetailRect())) {
-            detailed = !detailed;
-            return true;
-        }
         if (hit(mouseX, mouseY, clearAllRect())) {
             if (activeTab == 0) {
                 for (int slot = 1; slot <= SLOT_COUNT; slot++) {
@@ -494,7 +615,7 @@ public final class MoluMenuScreen extends Screen {
                 bindings.clear();
                 return true;
             }
-            if (activeTab == recipeTab()) {
+            if (activeTab == recipeTabIndex()) {
                 recipePage = 1 - recipePage;
                 return true;
             }
@@ -513,6 +634,37 @@ public final class MoluMenuScreen extends Screen {
                 }
             }
         }
+        if (activeTab == comboTabIndex()) {
+            for (int i = 0; i < 3; i++) {
+                if (!comboSlots[i].isEmpty() && hit(mouseX, mouseY, comboSlotRect(i))) {
+                    comboSlots[i] = "";
+                    return true;
+                }
+            }
+            int[] grid = comboGridRect();
+            int gx = grid[0], gy = grid[1], cols = grid[2], size = grid[3];
+            int visibleRows = grid[4], offset = grid[5];
+            for (int i = offset * cols; i < comboGlyphs.size() && i < (offset + visibleRows) * cols; i++) {
+                int displayRow = i / cols - offset;
+                int col = i % cols;
+                int rx = gx + col * size;
+                int ry = gy + displayRow * size;
+                if (hit(mouseX, mouseY, new int[] {rx, ry, size - 4, size - 4})) {
+                    fillNextSlot(comboGlyphs.get(i));
+                    return true;
+                }
+            }
+        }
+        if (activeTab == settingsTabIndex()) {
+            if (hit(mouseX, mouseY, hintsToggleRect())) {
+                AozaiInkClientConfig.toggleHintsEnabled();
+                return true;
+            }
+            if (hit(mouseX, mouseY, detailToggleRect())) {
+                detailed = !detailed;
+                return true;
+            }
+        }
         return super.mouseClicked(mouseX, mouseY, button);
     }
 
@@ -529,10 +681,20 @@ public final class MoluMenuScreen extends Screen {
         } else if (activeTab == 1) {
             totalRows = Math.max(1, (glyphs.size() + 1) / 2);
             visibleRows = visibleRows(24, 24, totalRows);
-        } else if (activeTab == recipeTab()) {
+        } else if (activeTab == recipeTabIndex() || activeTab == settingsTabIndex()) {
             return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        } else if (activeTab == comboTabIndex()) {
+            int[] grid = comboGridRect();
+            int cols = grid[2];
+            visibleRows = grid[4];
+            int rows = (comboGlyphs.size() + cols - 1) / cols;
+            int next = clamp(scrollOffsets[activeTab] + (scrollY < 0.0 ? 1 : -1),
+                0, Math.max(0, rows - visibleRows));
+            if (next == scrollOffsets[activeTab]) return false;
+            scrollOffsets[activeTab] = next;
+            return true;
         } else {
-            totalRows = Math.max(1, extensionTabs.get(activeTab - 2).rows().size());
+            totalRows = Math.max(1, extensionTabs.get(activeTab - extensionTabStart()).rows().size());
             visibleRows = visibleRows(22, 20, totalRows);
         }
         int next = clamp(scrollOffsets[activeTab] + (scrollY < 0.0 ? 1 : -1),
@@ -563,7 +725,10 @@ public final class MoluMenuScreen extends Screen {
     private int buttonW() { return Math.max(64, Math.min(112, panelW() / 7)); }
     private int buttonH() { return Math.max(20, Math.min(34, panelH() / 17)); }
     private int recipeSlotSize() { return Math.max(24, Math.min(34, panelH() / 14)); }
-    private int recipeTab() { return tabLabels.size() - 1; }
+    private int comboTabIndex() { return 2; }
+    private int extensionTabStart() { return 3; }
+    private int recipeTabIndex() { return tabLabels.size() - 2; }
+    private int settingsTabIndex() { return tabLabels.size() - 1; }
 
     private int[] tabRect(int index) {
         int x = panelX + Math.max(12, panelW() / 60);
@@ -580,6 +745,59 @@ public final class MoluMenuScreen extends Screen {
     private int[] clearRect(int rowY, int rowH) {
         int h = Math.max(12, Math.min(18, rowH - 8));
         return new int[] {contentX() + contentW() - 56, rowY + (rowH - h) / 2, 44, h};
+    }
+
+    private int[] comboSlotRect(int slot) {
+        int slotSize = recipeSlotSize();
+        int pad = 8;
+        int plusW = font.width("+");
+        int slotX = contentX() + slot * (slotSize + plusW + pad * 2);
+        return new int[] {slotX, contentY() + 4, slotSize, slotSize};
+    }
+
+    private int[] comboGridRect() {
+        int x = contentX(), y = contentY(), w = contentW();
+        int slotSize = recipeSlotSize();
+        int cols = Math.max(4, w / (slotSize + 8));
+        int slotY = y + 4;
+        int textY = slotY + slotSize + 12;
+        int textH = 60;
+        int rows = (comboGlyphs.size() + cols - 1) / cols;
+        int neededRows = Math.min(rows, 3);
+        int gridTop = Math.min(textY + textH + 12,
+            bottomY() - 14 - neededRows * slotSize);
+        int gridBottom = bottomY() - 14;
+        int gridH = Math.max(neededRows * slotSize, gridBottom - gridTop);
+        int visibleRows = Math.max(neededRows, gridH / slotSize);
+        visibleRows = Math.min(visibleRows, rows);
+        int offset = clamp(scrollOffsets[comboTabIndex()], 0, Math.max(0, rows - visibleRows));
+        scrollOffsets[comboTabIndex()] = offset;
+        return new int[] {x, gridTop, cols, slotSize, visibleRows, offset};
+    }
+
+    private void fillNextSlot(String glyph) {
+        for (int i = 0; i < comboSlots.length; i++) {
+            if (comboSlots[i].isEmpty()) {
+                comboSlots[i] = glyph;
+                return;
+            }
+        }
+    }
+
+    private int[] hintsToggleRect() {
+        int x = contentX() + 16;
+        int y = contentY() + 8;
+        int labelW = Math.max(menuWidth("上下文提示:"), menuWidth("效果描述:"));
+        int btnW = Math.max(44, menuWidth("简略") + 18);
+        return new int[] {x + labelW + 12, y, btnW, buttonH()};
+    }
+
+    private int[] detailToggleRect() {
+        int x = contentX() + 16;
+        int y = contentY() + 8;
+        int labelW = Math.max(menuWidth("上下文提示:"), menuWidth("效果描述:"));
+        int btnW = Math.max(44, menuWidth("简略") + 18);
+        return new int[] {x + labelW + 12, y + buttonH() + 10, btnW, buttonH()};
     }
 
     private int visibleRows(int minimumRowHeight, int reserved, int totalRows) {

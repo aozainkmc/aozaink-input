@@ -2,6 +2,8 @@ package com.aozainkmc.input.client;
 
 import com.aozainkmc.input.AozaiInkInput;
 import com.aozainkmc.input.block.AozaiInkBlocks;
+import com.aozainkmc.input.item.AozaiInkItems;
+import com.aozainkmc.input.item.TalismanAssembly;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
@@ -9,6 +11,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.LogicalSide;
@@ -33,24 +36,36 @@ public final class AozaiInkClientEvents {
         QuickCastCandidateClient.tick(minecraft);
         BindingRitualCameraTransition.tick(minecraft);
         TalismanCameraTransition.tick(minecraft);
+        TalismanHintRenderer.tick(minecraft);
     }
 
     @SubscribeEvent
     public static void onRenderLevel(RenderLevelStageEvent event) {
         InkInputController.render(event);
         TalismanFormationRenderer.render(event);
+        TalismanHintRenderer.render(event);
     }
 
     @SubscribeEvent
     public static void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
         if (event.getSide() != LogicalSide.CLIENT || event.getHand() != InteractionHand.MAIN_HAND) return;
-        if (event.getLevel().getBlockState(event.getPos()).is(AozaiInkBlocks.YELLOW_TALISMAN.get())) {
-            TalismanCameraTransition.start(Minecraft.getInstance(), event.getPos());
+        var level = event.getLevel();
+        var pos = event.getPos();
+        var state = level.getBlockState(pos);
+        ItemStack stack = event.getItemStack();
+        if (state.is(AozaiInkBlocks.YELLOW_TALISMAN.get())) {
+            TalismanHintRenderer.onOpened();
+            TalismanCameraTransition.start(Minecraft.getInstance(), pos);
             event.setCancellationResult(InteractionResult.SUCCESS);
             event.setCanceled(true);
             return;
         }
-        if (togglePaperCasting(event.getItemStack())) {
+        if (state.is(Blocks.CRAFTING_TABLE)
+                && stack.is(AozaiInkItems.YELLOW_TALISMAN.get())
+                && !TalismanAssembly.isWritten(stack)) {
+            TalismanHintRenderer.onPlaced();
+        }
+        if (togglePaperCasting(stack)) {
             event.setCancellationResult(InteractionResult.SUCCESS);
             event.setCanceled(true);
         }

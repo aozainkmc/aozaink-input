@@ -83,6 +83,9 @@ public final class TalismanWritingScreen extends Screen {
         addRenderableWidget(Button.builder(Component.literal("成符"), button -> finish())
             .bounds(panelX + panelWidth - PANEL_PAD - 70, buttonY, 70, 20)
             .build());
+        addRenderableWidget(Button.builder(Component.literal("X"), button -> requestAnimatedClose(false))
+            .bounds(panelX + panelWidth + 4, panelY - 4, 20, 20)
+            .build());
     }
 
     @Override

@@ -5,12 +5,17 @@ import java.util.List;
 import net.minecraft.ChatFormatting;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
+import javax.annotation.Nullable;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
+import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.context.UseOnContext;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 
@@ -25,12 +30,19 @@ public final class YellowTalismanItem extends BlockItem {
         if (TalismanAssembly.isWritten(stack)) {
             return InteractionResult.PASS;
         }
-        if (!context.getLevel().getBlockState(context.getClickedPos()).is(Blocks.CRAFTING_TABLE)) {
-            Player player = context.getPlayer();
-            if (player != null && context.getLevel().isClientSide) {
+        Level level = context.getLevel();
+        BlockPos clickedPos = context.getClickedPos();
+        Player player = context.getPlayer();
+        if (!level.getBlockState(clickedPos).is(Blocks.CRAFTING_TABLE)) {
+            if (player != null && level.isClientSide) {
                 player.displayClientMessage(Component.literal("黄符只能放在工作台上"), true);
             }
             return InteractionResult.FAIL;
+        }
+        if (player != null && player.isCrouching()) {
+            BlockPlaceContext placeContext = BlockPlaceContext.at(
+                new BlockPlaceContext(context), clickedPos, Direction.UP);
+            return this.place(placeContext);
         }
         return super.useOn(context);
     }
