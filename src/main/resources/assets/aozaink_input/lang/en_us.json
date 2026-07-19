@@ -1,4 +1,6 @@
 {
   "item.aozaink_input.yellow_talisman": "Yellow Talisman",
-  "block.aozaink_input.yellow_talisman": "Yellow Talisman"
+  "block.aozaink_input.yellow_talisman": "Yellow Talisman",
+  "key.categories.aozaink_input": "Sigillum",
+  "key.aozaink_input.open_molu_menu": "Open Sigillum Book"
 }

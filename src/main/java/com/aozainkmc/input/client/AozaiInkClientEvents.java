@@ -1,5 +1,7 @@
 package com.aozainkmc.input.client;
 
+import com.aozainkmc.core.AozaiInkCoreApi;
+import com.aozainkmc.core.api.client.TalismanPlacedHook;
 import com.aozainkmc.input.AozaiInkInput;
 import com.aozainkmc.input.block.AozaiInkBlocks;
 import com.aozainkmc.input.item.AozaiInkItems;
@@ -64,6 +66,8 @@ public final class AozaiInkClientEvents {
                 && stack.is(AozaiInkItems.YELLOW_TALISMAN.get())
                 && !TalismanAssembly.isWritten(stack)) {
             TalismanHintRenderer.onPlaced();
+            TalismanPlacedHook hook = AozaiInkCoreApi.getService(TalismanPlacedHook.class);
+            if (hook != null) hook.onTalismanPlaced();
         }
         if (togglePaperCasting(stack)) {
             event.setCancellationResult(InteractionResult.SUCCESS);

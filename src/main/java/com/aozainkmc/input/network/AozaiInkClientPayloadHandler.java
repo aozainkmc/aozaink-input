@@ -1,5 +1,7 @@
 package com.aozainkmc.input.network;
 
+import com.aozainkmc.core.AozaiInkCoreApi;
+import com.aozainkmc.core.api.client.MoluMenuOpenHook;
 import com.aozainkmc.input.client.BindingRitualCameraTransition;
 import com.aozainkmc.input.client.InputBindingRitualRenderer;
 import com.aozainkmc.input.client.MoluMenuScreen;
@@ -23,6 +25,10 @@ final class AozaiInkClientPayloadHandler {
 
     static void handleMenu(MoluMenuPayload payload) {
         Minecraft.getInstance().setScreen(new MoluMenuScreen(payload));
+        MoluMenuOpenHook hook = AozaiInkCoreApi.getService(MoluMenuOpenHook.class);
+        if (hook != null) {
+            hook.onMoluMenuOpened();
+        }
     }
 
     static void handleBindingRitual(InputBindingRitualPayload payload) {

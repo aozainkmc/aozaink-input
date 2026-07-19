@@ -1,4 +1,6 @@
 {
   "item.aozaink_input.yellow_talisman": "黄符",
-  "block.aozaink_input.yellow_talisman": "黄符"
+  "block.aozaink_input.yellow_talisman": "黄符",
+  "key.categories.aozaink_input": "符咒",
+  "key.aozaink_input.open_molu_menu": "打开符咒簿"
 }

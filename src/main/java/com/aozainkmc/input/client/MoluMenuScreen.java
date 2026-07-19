@@ -48,7 +48,6 @@ public final class MoluMenuScreen extends Screen {
     private int panelX;
     private int panelY;
     private int activeTab;
-    private int recipePage;
     private boolean detailed = true;
 
     public MoluMenuScreen(MoluMenuPayload payload) {
@@ -58,11 +57,11 @@ public final class MoluMenuScreen extends Screen {
         }
         glyphs = List.copyOf(payload.glyphs());
         extensionTabs = List.copyOf(payload.tabs());
+        tabLabels.add("快速上手");
         tabLabels.add("快速吟唱");
         tabLabels.add("黄符字典");
         tabLabels.add("技能表");
         for (MoluMenuPayload.TabEntry tab : extensionTabs) tabLabels.add(tab.label());
-        tabLabels.add("配方");
         tabLabels.add("设置");
         scrollOffsets = new int[tabLabels.size()];
         comboGlyphs = List.copyOf(AozaiInkInput.talismanGlyphs());
@@ -81,13 +80,143 @@ public final class MoluMenuScreen extends Screen {
         drawFrame(g);
         drawTitle(g);
         drawTabs(g, mouseX, mouseY);
-        if (activeTab == 0) renderBindings(g);
-        else if (activeTab == 1) renderCodex(g);
+        if (activeTab == 0) renderQuickStart(g);
+        else if (activeTab == 1) renderBindings(g);
+        else if (activeTab == 2) renderCodex(g);
         else if (activeTab == comboTabIndex()) renderComboWiki(g);
-        else if (activeTab == recipeTabIndex()) renderRecipes(g);
         else if (activeTab == settingsTabIndex()) renderSettings(g, mouseX, mouseY);
         else renderExtension(g, extensionTabs.get(activeTab - extensionTabStart()));
         drawBottomButtons(g, mouseX, mouseY);
+    }
+
+    private int comboTabIndex() { return 3; }
+    private int extensionTabStart() { return 4; }
+    private int settingsTabIndex() { return tabLabels.size() - 1; }
+
+    private void renderQuickStart(GuiGraphics g) {
+        int x = contentX(), y = contentY(), w = contentW();
+        int panelH = contentH();
+        int rowH = 18;
+        int bottomPadding = 24;
+        int totalRows = quickStartTotalRows();
+        int visibleRows = panelH / rowH;
+        int maxOffset = Math.max(0, totalRows - visibleRows + bottomPadding / rowH);
+        int offset = clamp(scrollOffsets[0], 0, maxOffset);
+        scrollOffsets[0] = offset;
+
+        g.enableScissor(x, y, x + w, y + panelH);
+
+        int yy = y - offset * rowH + 8;
+        int textX = x + 18;
+        int maxW = w - 36;
+
+        yy += drawQuickStartLine(g, "核心玩法", textX, yy, maxW, HOT_TX, 1.2f) + 8;
+        yy += drawQuickStartLine(g, "① 先合成空白黄符", textX, yy, maxW, PAPER_TX, 1.05f) + 5;
+        yy += drawQuickStartWrapped(g, "在工作台无序合成：3 张纸 + 1 份黄色染料，产出 6 张空白黄符。",
+            textX + 14, yy, maxW - 14, PAPER_TX, 0.84f) + 10;
+
+        int blankY = yy;
+        renderBlankTalismanRecipeAt(g, x + 24, blankY, w - 48);
+        yy += recipeSlotSize() * 2 + 44;
+
+        yy += drawQuickStartLine(g, "② 把空白黄符放到工作台上", textX, yy, maxW, PAPER_TX, 1.05f) + 5;
+        yy += drawQuickStartWrapped(g, "手持空白黄符，按住潜行键并对工作台按使用键，即可将其平铺在工作台上。",
+            textX + 14, yy, maxW - 14, PAPER_TX, 0.84f) + 12;
+
+        yy += drawQuickStartLine(g, "③ 书写并施放", textX, yy, maxW, PAPER_TX, 1.05f) + 5;
+        yy += drawQuickStartWrapped(g, "右键已放置的黄符打开书写界面，按提示写出符咒。书写完成后拿起成符，右键即可施放。",
+            textX + 14, yy, maxW - 14, PAPER_TX, 0.84f) + 16;
+
+        yy += drawQuickStartLine(g, "拓印配方", textX, yy, maxW, HOT_TX, 1.2f) + 8;
+        yy += drawQuickStartWrapped(g, "后期可以把写好的成符复制给更多空白黄符：",
+            textX, yy, maxW, PAPER_TX, 0.84f) + 8;
+        int copyY = yy;
+        renderCopyRecipeAt(g, x + 24, copyY, w - 48);
+        yy += recipeSlotSize() * 3 + 40;
+
+        yy += drawQuickStartLine(g, "提示", textX, yy, maxW, HOT_TX, 1.2f) + 8;
+        yy += drawQuickStartWrapped(g, "对准工作台或已放置黄符时，会显示悬浮操作提示。可在“设置”中关闭。",
+            textX, yy, maxW, PAPER_TX, 0.84f);
+
+        g.disableScissor();
+
+        if (totalRows > visibleRows) {
+            drawScrollBar(g, x, y, w, panelH, totalRows + bottomPadding / rowH, visibleRows, offset);
+        }
+    }
+
+    private int quickStartTotalRows() {
+        int rowH = 18;
+        int x = contentX(), w = contentW();
+        int textX = x + 18;
+        int maxW = w - 36;
+        int h = 8;
+        h += lineHeightScaled(1.2f) + 8;
+        h += lineHeightScaled(1.05f) + 5;
+        h += measureWrappedString("在工作台无序合成：3 张纸 + 1 份黄色染料，产出 6 张空白黄符。",
+            maxW - 14, 4, 0.84f) + 10;
+        h += recipeSlotSize() * 2 + 44;
+        h += lineHeightScaled(1.05f) + 5;
+        h += measureWrappedString("手持空白黄符，按住潜行键并对工作台按使用键，即可将其平铺在工作台上。",
+            maxW - 14, 4, 0.84f) + 12;
+        h += lineHeightScaled(1.05f) + 5;
+        h += measureWrappedString("右键已放置的黄符打开书写界面，按提示写出符咒。书写完成后拿起成符，右键即可施放。",
+            maxW - 14, 4, 0.84f) + 16;
+        h += lineHeightScaled(1.2f) + 8;
+        h += measureWrappedString("后期可以把写好的成符复制给更多空白黄符：",
+            maxW, 4, 0.84f) + 8;
+        h += recipeSlotSize() * 3 + 40;
+        h += lineHeightScaled(1.2f) + 8;
+        h += measureWrappedString("对准工作台或已放置黄符时，会显示悬浮操作提示。可在“设置”中关闭。",
+            maxW, 4, 0.84f);
+        return (h + rowH - 1) / rowH;
+    }
+
+    private int lineHeightScaled(float scale) {
+        return Math.round(font.lineHeight * scale);
+    }
+
+    private int drawQuickStartLine(GuiGraphics g, String text, int x, int y, int maxW, int color, float scale) {
+        drawScaledText(g, text, x, y, color, scale);
+        return Math.round(font.lineHeight * scale);
+    }
+
+    private int drawQuickStartWrapped(GuiGraphics g, String text, int x, int y, int maxW, int color, float scale) {
+        return drawWrappedString(g, text, x, y, maxW, 4, color, scale);
+    }
+
+    private void renderBlankTalismanRecipeAt(GuiGraphics g, int x, int y, int w) {
+        int size = recipeSlotSize();
+        drawRecipeSlot(g, x, y, size, "纸", PAPER_TX);
+        drawRecipeSlot(g, x + size + 5, y, size, "纸", PAPER_TX);
+        drawRecipeSlot(g, x, y + size + 5, size, "纸", PAPER_TX);
+        drawRecipeSlot(g, x + size + 5, y + size + 5, size, "黄色 染料", PAPER_TX);
+        drawScaledCenteredString(g, ">", x + size * 2 + 32, y + size - 4, PAPER_TX, 1.4f);
+        drawRecipeSlot(g, x + size * 2 + 58, y + (size + 5) / 2, size, "黄符x6", PAPER_TX);
+        int textX = x + Math.max(170, w * 36 / 100);
+        drawInfoLines(g, textX, y + 8, x + w - textX - 10, List.of(
+            "无序合成：3纸 + 1黄色染料。",
+            "产出6张空白黄符。"));
+    }
+
+    private void renderCopyRecipeAt(GuiGraphics g, int x, int y, int w) {
+        int size = recipeSlotSize();
+        String[][] cells = {{"空白 黄符", "空白 黄符", "空白 黄符"},
+                            {"空白 黄符", "成符", "空白 黄符"},
+                            {"空白 黄符", "红色 染料", "空白 黄符"}};
+        for (int row = 0; row < 3; row++) {
+            for (int column = 0; column < 3; column++) {
+                drawRecipeSlot(g, x + column * (size + 5), y + row * (size + 5),
+                    size, cells[row][column], PAPER_TX);
+            }
+        }
+        drawScaledCenteredString(g, ">", x + size * 3 + 30, y + size + 4, PAPER_TX, 1.4f);
+        drawRecipeSlot(g, x + size * 3 + 56, y + size + 5, size, "成符x2", PAPER_TX);
+        int textX = x + Math.max(170, w * 36 / 100);
+        drawInfoLines(g, textX, y + 8, x + w - textX - 10, List.of(
+            "有序3x3拓印。",
+            "中心放已写黄符，下中放红色染料。",
+            "其余7格放空白黄符。"));
     }
 
     private void renderBindings(GuiGraphics g) {
@@ -95,8 +224,8 @@ public final class MoluMenuScreen extends Screen {
         int headerH = 20;
         int visibleRows = visibleRows(20, headerH, SLOT_COUNT);
         int rowH = rowHeight(visibleRows, headerH, 20, 24);
-        int offset = clamp(scrollOffsets[0], 0, SLOT_COUNT - visibleRows);
-        scrollOffsets[0] = offset;
+        int offset = clamp(scrollOffsets[activeTab], 0, SLOT_COUNT - visibleRows);
+        scrollOffsets[activeTab] = offset;
         int slotColX = x;
         int slotColW = w * 16 / 100;
         int glyphColX = x + slotColW;
@@ -153,8 +282,8 @@ public final class MoluMenuScreen extends Screen {
         int visibleRows = visibleRows(24, 24, totalRows);
         int rowH = rowHeight(visibleRows, 30, 24, 30);
         int listY = y + 24;
-        int offset = clamp(scrollOffsets[1], 0, totalRows - visibleRows);
-        scrollOffsets[1] = offset;
+        int offset = clamp(scrollOffsets[activeTab], 0, totalRows - visibleRows);
+        scrollOffsets[activeTab] = offset;
         drawDarkPanel(g, x, y, w, 24 + visibleRows * rowH);
         g.fill(x + 1, y + 1, x + w - 1, y + 22, PAPER_DK);
         drawMenuString(g, "玩法字典 · 写符时会实时显示组合效果", x + 16, y + 7, INK);
@@ -212,52 +341,6 @@ public final class MoluMenuScreen extends Screen {
             totalRows, visibleRows, offset);
     }
 
-    private void renderRecipes(GuiGraphics g) {
-        int x = contentX(), y = contentY(), w = contentW(), h = contentH();
-        drawDarkPanel(g, x, y, w, h);
-        g.fill(x + 1, y + 1, x + w - 1, y + 22, PAPER_DK);
-        drawMenuString(g, recipePage == 0 ? "空白黄符" : "拓印", x + 16, y + 7, INK);
-        drawMenuString(g, (recipePage + 1) + "/2", x + w - 32, y + 7, INK);
-        if (recipePage == 0) renderBlankTalismanRecipe(g, x, y, w);
-        else renderCopyRecipe(g, x, y, w);
-    }
-
-    private void renderBlankTalismanRecipe(GuiGraphics g, int x, int y, int w) {
-        int gridX = x + 36, gridY = y + 48, size = recipeSlotSize();
-        drawRecipeSlot(g, gridX, gridY, size, "纸", PAPER_TX);
-        drawRecipeSlot(g, gridX + size + 5, gridY, size, "纸", PAPER_TX);
-        drawRecipeSlot(g, gridX, gridY + size + 5, size, "纸", PAPER_TX);
-        drawRecipeSlot(g, gridX + size + 5, gridY + size + 5, size, "黄", PAPER_TX);
-        drawScaledCenteredString(g, ">", gridX + size * 2 + 32, gridY + size - 4, PAPER_TX, 1.4f);
-        drawRecipeSlot(g, gridX + size * 2 + 58, gridY + (size + 5) / 2, size, "黄符x6", PAPER_TX);
-        int textX = x + Math.max(210, w * 42 / 100);
-        drawInfoLines(g, textX, y + 50, x + w - textX - 20, List.of(
-            "无序合成：3纸 + 1黄色染料。",
-            "产出6张空白黄符。",
-            "空白黄符只能放在工作台上书写。"));
-    }
-
-    private void renderCopyRecipe(GuiGraphics g, int x, int y, int w) {
-        int gridX = x + 26, gridY = y + 40, size = recipeSlotSize();
-        String[][] cells = {{"空白 黄符", "空白 黄符", "空白 黄符"},
-                            {"空白 黄符", "成符", "空白 黄符"},
-                            {"空白 黄符", "红色 染料", "空白 黄符"}};
-        for (int row = 0; row < 3; row++) {
-            for (int column = 0; column < 3; column++) {
-                drawRecipeSlot(g, gridX + column * (size + 5), gridY + row * (size + 5),
-                    size, cells[row][column], PAPER_TX);
-            }
-        }
-        drawScaledCenteredString(g, ">", gridX + size * 3 + 30, gridY + size + 4, PAPER_TX, 1.4f);
-        drawRecipeSlot(g, gridX + size * 3 + 56, gridY + size + 5, size, "成符x2", PAPER_TX);
-        int textX = x + Math.max(236, w * 46 / 100);
-        drawInfoLines(g, textX, y + 44, x + w - textX - 20, List.of(
-            "有序3x3拓印。",
-            "中心放已写黄符，下中放红色染料。",
-            "其余7格放空白黄符。",
-            "产出2张相同成符。"));
-    }
-
     private void renderComboWiki(GuiGraphics g) {
         int x = contentX(), y = contentY(), w = contentW();
         int slotSize = recipeSlotSize();
@@ -313,7 +396,7 @@ public final class MoluMenuScreen extends Screen {
 
         boolean enabled = AozaiInkClientConfig.hintsEnabled();
         int[] hintsBtn = hintsToggleRect();
-        drawMenuString(g, "上下文提示:", x, y + (buttonH() - font.lineHeight) / 2, PAPER_TX);
+        drawMenuString(g, "悬浮提示:", x, y + (buttonH() - font.lineHeight) / 2, PAPER_TX);
         drawButton(g, hintsBtn, enabled ? "开" : "关",
             enabled ? PAPER_DK : RED, mouseX, mouseY);
 
@@ -323,7 +406,7 @@ public final class MoluMenuScreen extends Screen {
             PAPER_DK, mouseX, mouseY);
 
         drawInfoLines(g, x, detailBtn[1] + detailBtn[3] + 16, contentW() - 32, List.of(
-            "上下文提示：开启后，对准工作台或已放置黄符时会显示操作提示。",
+            "悬浮提示：开启后，对准工作台或已放置黄符时会显示操作提示。",
             "效果描述：切换黄符字典与快速吟唱中的效果描述详细程度。"));
     }
 
@@ -351,10 +434,10 @@ public final class MoluMenuScreen extends Screen {
     }
 
     private String titleText() {
-        if (activeTab == 0) return "快速吟唱设置";
-        if (activeTab == 1) return "黄符字典";
+        if (activeTab == 0) return "快速上手";
+        if (activeTab == 1) return "快速吟唱设置";
+        if (activeTab == 2) return "黄符字典";
         if (activeTab == comboTabIndex()) return "技能表";
-        if (activeTab == recipeTabIndex()) return "配方";
         if (activeTab == settingsTabIndex()) return "设置";
         return extensionTabs.get(activeTab - extensionTabStart()).title();
     }
@@ -379,11 +462,8 @@ public final class MoluMenuScreen extends Screen {
     }
 
     private void drawBottomButtons(GuiGraphics g, int mouseX, int mouseY) {
-        if (activeTab == 0) {
+        if (activeTab == 1) {
             drawButton(g, clearAllRect(), "全部清空", PAPER_DK, mouseX, mouseY);
-        } else if (activeTab == recipeTabIndex()) {
-            drawButton(g, clearAllRect(), recipePage == 0 ? "拓印配方" : "空符配方",
-                PAPER_DK, mouseX, mouseY);
         }
         drawButton(g, backRect(), "返回", PAPER_DK, mouseX, mouseY);
     }
@@ -516,6 +596,21 @@ public final class MoluMenuScreen extends Screen {
         return used;
     }
 
+    private int measureWrappedString(String text, int maxWidth, int maxLines, float scale) {
+        if (maxWidth <= 0 || maxLines <= 0 || text == null || text.isEmpty()) return 0;
+        int available = Math.max(1, (int) (maxWidth / scale));
+        int lineHeight = Math.max(6, Math.round(font.lineHeight * scale));
+        String remaining = text;
+        int used = 0;
+        for (int line = 0; line < maxLines && !remaining.isEmpty(); line++) {
+            String value = font.plainSubstrByWidth(remaining, available);
+            if (value.isEmpty()) break;
+            remaining = remaining.substring(value.length());
+            used += lineHeight;
+        }
+        return used;
+    }
+
     private void drawWrappedCenteredInBox(GuiGraphics g, String text, int x, int y,
             int w, int h, int maxLines, int color, float scale) {
         if (w <= 0 || h <= 0 || maxLines <= 0 || text == null || text.isEmpty()) return;
@@ -606,7 +701,7 @@ public final class MoluMenuScreen extends Screen {
             return true;
         }
         if (hit(mouseX, mouseY, clearAllRect())) {
-            if (activeTab == 0) {
+            if (activeTab == 1) {
                 for (int slot = 1; slot <= SLOT_COUNT; slot++) {
                     if (bindings.containsKey(slot)) {
                         PacketDistributor.sendToServer(new ClearQuickBindingPayload(slot));
@@ -615,15 +710,11 @@ public final class MoluMenuScreen extends Screen {
                 bindings.clear();
                 return true;
             }
-            if (activeTab == recipeTabIndex()) {
-                recipePage = 1 - recipePage;
-                return true;
-            }
         }
-        if (activeTab == 0) {
+        if (activeTab == 1) {
             int visibleRows = visibleRows(20, 20, SLOT_COUNT);
             int rowH = rowHeight(visibleRows, 20, 20, 24);
-            int offset = clamp(scrollOffsets[0], 0, SLOT_COUNT - visibleRows);
+            int offset = clamp(scrollOffsets[1], 0, SLOT_COUNT - visibleRows);
             for (int row = 0; row < visibleRows; row++) {
                 int slot = offset + row + 1;
                 int rowY = contentY() + 20 + row * rowH;
@@ -633,6 +724,9 @@ public final class MoluMenuScreen extends Screen {
                     return true;
                 }
             }
+        }
+        if (activeTab == 0 || activeTab == settingsTabIndex()) {
+            return super.mouseClicked(mouseX, mouseY, button);
         }
         if (activeTab == comboTabIndex()) {
             for (int i = 0; i < 3; i++) {
@@ -676,12 +770,16 @@ public final class MoluMenuScreen extends Screen {
         int totalRows;
         int visibleRows;
         if (activeTab == 0) {
+            totalRows = quickStartTotalRows();
+            visibleRows = visibleRows(20, 20, totalRows);
+            if (totalRows <= visibleRows) return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
+        } else if (activeTab == 1) {
             totalRows = SLOT_COUNT;
             visibleRows = visibleRows(20, 20, totalRows);
-        } else if (activeTab == 1) {
+        } else if (activeTab == 2) {
             totalRows = Math.max(1, (glyphs.size() + 1) / 2);
             visibleRows = visibleRows(24, 24, totalRows);
-        } else if (activeTab == recipeTabIndex() || activeTab == settingsTabIndex()) {
+        } else if (activeTab == settingsTabIndex()) {
             return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
         } else if (activeTab == comboTabIndex()) {
             int[] grid = comboGridRect();
@@ -698,7 +796,7 @@ public final class MoluMenuScreen extends Screen {
             visibleRows = visibleRows(22, 20, totalRows);
         }
         int next = clamp(scrollOffsets[activeTab] + (scrollY < 0.0 ? 1 : -1),
-            0, totalRows - visibleRows);
+            0, Math.max(0, totalRows - visibleRows));
         if (next == scrollOffsets[activeTab]) return false;
         scrollOffsets[activeTab] = next;
         return true;
@@ -725,10 +823,6 @@ public final class MoluMenuScreen extends Screen {
     private int buttonW() { return Math.max(64, Math.min(112, panelW() / 7)); }
     private int buttonH() { return Math.max(20, Math.min(34, panelH() / 17)); }
     private int recipeSlotSize() { return Math.max(24, Math.min(34, panelH() / 14)); }
-    private int comboTabIndex() { return 2; }
-    private int extensionTabStart() { return 3; }
-    private int recipeTabIndex() { return tabLabels.size() - 2; }
-    private int settingsTabIndex() { return tabLabels.size() - 1; }
 
     private int[] tabRect(int index) {
         int x = panelX + Math.max(12, panelW() / 60);
@@ -787,7 +881,7 @@ public final class MoluMenuScreen extends Screen {
     private int[] hintsToggleRect() {
         int x = contentX() + 16;
         int y = contentY() + 8;
-        int labelW = Math.max(menuWidth("上下文提示:"), menuWidth("效果描述:"));
+        int labelW = Math.max(menuWidth("悬浮提示:"), menuWidth("效果描述:"));
         int btnW = Math.max(44, menuWidth("简略") + 18);
         return new int[] {x + labelW + 12, y, btnW, buttonH()};
     }
@@ -795,7 +889,7 @@ public final class MoluMenuScreen extends Screen {
     private int[] detailToggleRect() {
         int x = contentX() + 16;
         int y = contentY() + 8;
-        int labelW = Math.max(menuWidth("上下文提示:"), menuWidth("效果描述:"));
+        int labelW = Math.max(menuWidth("悬浮提示:"), menuWidth("效果描述:"));
         int btnW = Math.max(44, menuWidth("简略") + 18);
         return new int[] {x + labelW + 12, y + buttonH() + 10, btnW, buttonH()};
     }
