@@ -3,6 +3,7 @@ package com.aozainkmc.input.network;
 import com.aozainkmc.input.AozaiInkInput;
 import com.aozainkmc.input.api.MoluMenuRegistry;
 import com.aozainkmc.input.binding.QuickGlyphBinding;
+import com.aozainkmc.input.client.OtherPlayerPaperManager;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.server.level.ServerPlayer;
@@ -19,6 +20,8 @@ public final class AozaiInkNetworking {
         PayloadRegistrar registrar = event.registrar("1");
         registrar.playToServer(SubmitTalismanPayload.TYPE, SubmitTalismanPayload.STREAM_CODEC, AozaiInkNetworking::handleSubmitTalisman);
         registrar.playToServer(CastPaperPayload.TYPE, CastPaperPayload.STREAM_CODEC, AozaiInkNetworking::handleCastPaper);
+        registrar.playToServer(ServerboundPaperOpenPayload.TYPE, ServerboundPaperOpenPayload.STREAM_CODEC, AozaiInkNetworking::handleServerboundPaperOpen);
+        registrar.playToServer(ServerboundPaperClosePayload.TYPE, ServerboundPaperClosePayload.STREAM_CODEC, AozaiInkNetworking::handleServerboundPaperClose);
         registrar.playToServer(PreviewQuickCastPayload.TYPE, PreviewQuickCastPayload.STREAM_CODEC,
             AozaiInkNetworking::handlePreviewQuickCast);
         registrar.playToServer(SelectQuickCastCandidatePayload.TYPE, SelectQuickCastCandidatePayload.STREAM_CODEC,
@@ -34,6 +37,10 @@ public final class AozaiInkNetworking {
         registrar.playToClient(MoluMenuPayload.TYPE, MoluMenuPayload.STREAM_CODEC, AozaiInkNetworking::handleMenu);
         registrar.playToClient(InputBindingRitualPayload.TYPE, InputBindingRitualPayload.STREAM_CODEC,
             AozaiInkNetworking::handleBindingRitual);
+        registrar.playToClient(ClientboundPaperOpenPayload.TYPE, ClientboundPaperOpenPayload.STREAM_CODEC,
+            AozaiInkNetworking::handleClientboundPaperOpen);
+        registrar.playToClient(ClientboundPaperClosePayload.TYPE, ClientboundPaperClosePayload.STREAM_CODEC,
+            AozaiInkNetworking::handleClientboundPaperClose);
     }
 
     public static void sendSubmitTalisman(SubmitTalismanPayload payload) {
@@ -42,6 +49,14 @@ public final class AozaiInkNetworking {
 
     public static void sendCastPaper(CastPaperPayload payload) {
         PacketDistributor.sendToServer(payload);
+    }
+
+    public static void sendPaperOpen(ServerboundPaperOpenPayload payload) {
+        PacketDistributor.sendToServer(payload);
+    }
+
+    public static void sendPaperClose() {
+        PacketDistributor.sendToServer(new ServerboundPaperClosePayload());
     }
 
     public static void sendPreviewQuickCast(PreviewQuickCastPayload payload) {
@@ -110,6 +125,30 @@ public final class AozaiInkNetworking {
 
     private static void handleBindingRitual(InputBindingRitualPayload payload, IPayloadContext context) {
         context.enqueueWork(() -> AozaiInkClientPayloadHandler.handleBindingRitual(payload));
+    }
+
+    private static void handleServerboundPaperOpen(ServerboundPaperOpenPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() instanceof ServerPlayer player) {
+                PaperCastStateManager.open(player, payload);
+            }
+        });
+    }
+
+    private static void handleServerboundPaperClose(ServerboundPaperClosePayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> {
+            if (context.player() instanceof ServerPlayer player) {
+                PaperCastStateManager.close(player);
+            }
+        });
+    }
+
+    private static void handleClientboundPaperOpen(ClientboundPaperOpenPayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> OtherPlayerPaperManager.onPaperOpen(payload));
+    }
+
+    private static void handleClientboundPaperClose(ClientboundPaperClosePayload payload, IPayloadContext context) {
+        context.enqueueWork(() -> OtherPlayerPaperManager.onPaperClose(payload));
     }
 
     public static void sendMenu(ServerPlayer player) {

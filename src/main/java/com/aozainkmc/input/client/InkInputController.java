@@ -5,6 +5,7 @@ import com.aozainkmc.input.AozaiInkInput;
 import com.aozainkmc.input.network.AozaiInkNetworking;
 import com.aozainkmc.input.network.CastPaperPayload;
 import com.aozainkmc.input.network.PreviewQuickCastPayload;
+import com.aozainkmc.input.network.ServerboundPaperOpenPayload;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -147,6 +148,8 @@ public final class InkInputController {
         lastHeldItem = player.getMainHandItem().copy();
         QuickCastCandidateClient.reset();
         clear();
+        AozaiInkNetworking.sendPaperOpen(new ServerboundPaperOpenPayload(
+            plane.center(), plane.normal(), plane.right(), plane.up(), plane.radius()));
         say(player, "白纸施写已展开：左键写，右键收束识别");
     }
 
@@ -207,6 +210,9 @@ public final class InkInputController {
     }
 
     private static void close() {
+        if (active) {
+            AozaiInkNetworking.sendPaperClose();
+        }
         active = false;
         plane = null;
         currentStroke = null;

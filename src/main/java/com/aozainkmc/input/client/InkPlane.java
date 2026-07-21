@@ -10,7 +10,7 @@ public final class InkPlane {
     private final Vec3 up;
     private final float radius;
 
-    private InkPlane(Vec3 center, Vec3 normal, Vec3 right, Vec3 up, float radius) {
+    InkPlane(Vec3 center, Vec3 normal, Vec3 right, Vec3 up, float radius) {
         this.center = center;
         this.normal = normal;
         this.right = right;

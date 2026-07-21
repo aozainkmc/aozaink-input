@@ -38,6 +38,17 @@ public final class InkCircleRenderer {
             strokes, currentStroke, currentHit, confirmProgress, viewingFromBack);
     }
 
+    public void renderOtherPlayerPaper(PoseStack poseStack, Camera camera, InkPlane plane) {
+        Vec3 camPos = camera.getPosition();
+        poseStack.pushPose();
+        poseStack.translate(
+            plane.center().x - camPos.x,
+            plane.center().y - camPos.y,
+            plane.center().z - camPos.z);
+        renderPaper(poseStack, plane);
+        poseStack.popPose();
+    }
+
     public void renderClosing(PoseStack poseStack, Camera camera, InkPlane plane,
                               List<InkStroke> strokes, float progress, boolean written,
                               boolean viewingFromBack, Vec3 returnCenter) {

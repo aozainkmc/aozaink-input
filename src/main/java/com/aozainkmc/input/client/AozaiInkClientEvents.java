@@ -6,6 +6,9 @@ import com.aozainkmc.input.AozaiInkInput;
 import com.aozainkmc.input.block.AozaiInkBlocks;
 import com.aozainkmc.input.item.AozaiInkItems;
 import com.aozainkmc.input.item.TalismanAssembly;
+import java.util.Map;
+import java.util.UUID;
+import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.chat.Component;
@@ -14,6 +17,7 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.LogicalSide;
@@ -28,6 +32,9 @@ import org.lwjgl.glfw.GLFW;
 
 @EventBusSubscriber(modid = AozaiInkInput.MOD_ID, value = Dist.CLIENT)
 public final class AozaiInkClientEvents {
+
+    private static final InkCircleRenderer OTHER_PAPER_RENDERER = new InkCircleRenderer();
+    private static final double OTHER_PAPER_RENDER_DISTANCE_SQR = 64.0 * 64.0;
 
     private AozaiInkClientEvents() {}
 
@@ -46,6 +53,20 @@ public final class AozaiInkClientEvents {
         InkInputController.render(event);
         TalismanFormationRenderer.render(event);
         TalismanHintRenderer.render(event);
+        renderOtherPlayerPapers(event);
+    }
+
+    private static void renderOtherPlayerPapers(RenderLevelStageEvent event) {
+        if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_WEATHER) return;
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.level == null || minecraft.player == null) return;
+        Camera camera = event.getCamera();
+        Vec3 cameraPos = camera.getPosition();
+        for (Map.Entry<UUID, InkPlane> entry : OtherPlayerPaperManager.papers().entrySet()) {
+            InkPlane plane = entry.getValue();
+            if (plane.center().distanceToSqr(cameraPos) > OTHER_PAPER_RENDER_DISTANCE_SQR) continue;
+            OTHER_PAPER_RENDERER.renderOtherPlayerPaper(event.getPoseStack(), camera, plane);
+        }
     }
 
     @SubscribeEvent
@@ -113,6 +134,7 @@ public final class AozaiInkClientEvents {
     public static void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {
         InkInputController.resetSession();
         QuickCastCandidateClient.reset();
+        OtherPlayerPaperManager.clear();
         BindingRitualCameraTransition.reset();
         TalismanCameraTransition.reset();
     }
