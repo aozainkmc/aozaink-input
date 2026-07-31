@@ -46,7 +46,7 @@ public final class TalismanScorer {
 
     private TalismanScorer() {}
 
-    public record Baseline(double strokeCount, double pointCount) {}
+    public record Baseline(double strokeCount, double pointCount, double durationMs) {}
 
     public record Score(
         String glyph,
@@ -84,7 +84,8 @@ public final class TalismanScorer {
         double pointScore = clamp01(1.0 - POINT_PENALTY_PER * Math.abs(pointCount - base.pointCount()));
         double shape = W_STROKE * strokeScore + W_POINT * pointScore;
 
-        double targetMs = TIME_TARGET_MS_BY_CHAR.getOrDefault(glyph, TIME_TARGET_FALLBACK_MS);
+        double targetMs = TIME_TARGET_MS_BY_CHAR.getOrDefault(glyph,
+            base.durationMs() > 0.0 ? base.durationMs() : TIME_TARGET_FALLBACK_MS);
         double ticksDelta = (durationMs - targetMs) / MS_PER_TICK;
         double timeFactor = clamp(1.0 - TIME_PER_TICK * ticksDelta, 0.0, 1.0 + TIME_BONUS_CAP);
 
@@ -118,7 +119,8 @@ public final class TalismanScorer {
                     JsonObject entry = root.getAsJsonObject(glyph);
                     out.put(glyph, new Baseline(
                         entry.get("stroke_count").getAsDouble(),
-                        entry.get("point_count").getAsDouble()
+                        entry.get("point_count").getAsDouble(),
+                        entry.has("duration_ms") ? entry.get("duration_ms").getAsDouble() : 0.0
                     ));
                 }
             }

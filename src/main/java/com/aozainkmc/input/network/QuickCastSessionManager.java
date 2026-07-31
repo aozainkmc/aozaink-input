@@ -17,6 +17,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -53,6 +55,7 @@ final class QuickCastSessionManager {
             .toList();
         if (candidates.isEmpty()) {
             player.displayClientMessage(Component.literal("[AozaiInk] 未识别到可吟唱字"), true);
+            AozaiInkServerHandlers.playFailureFeedback(player);
             return;
         }
 
@@ -69,11 +72,13 @@ final class QuickCastSessionManager {
         Session session = SESSIONS.get(player.getUUID());
         if (session == null || session.id() != payload.sessionId()) {
             player.displayClientMessage(Component.literal("[AozaiInk] 候选已失效，请重新落笔"), true);
+            AozaiInkServerHandlers.playFailureFeedback(player);
             return;
         }
         if (player.serverLevel().getGameTime() > session.expiresAt()) {
             SESSIONS.remove(player.getUUID(), session);
             player.displayClientMessage(Component.literal("[AozaiInk] 候选已超时，请重新落笔"), true);
+            AozaiInkServerHandlers.playFailureFeedback(player);
             return;
         }
         if (payload.index() < 0 || payload.index() >= session.candidates().size()) {
@@ -84,6 +89,7 @@ final class QuickCastSessionManager {
         // so duplicate packets can never consume paper or cast a second time.
         if (!SESSIONS.remove(player.getUUID(), session)) {
             player.displayClientMessage(Component.literal("[AozaiInk] 候选已被使用"), true);
+            AozaiInkServerHandlers.playFailureFeedback(player);
             return;
         }
 
@@ -92,6 +98,7 @@ final class QuickCastSessionManager {
         if (target == null) return;
         if (!consumePaper(player)) {
             player.displayClientMessage(Component.literal("[AozaiInk] 需要消耗一张纸"), true);
+            AozaiInkServerHandlers.playFailureFeedback(player);
             return;
         }
         dispatch(player, session, selected, target, payload.index());
@@ -109,10 +116,12 @@ final class QuickCastSessionManager {
         QuickGlyphBinding.Binding binding = QuickGlyphBinding.get(player, digit).orElse(null);
         if (binding == null) {
             player.displayClientMessage(Component.literal("数字 " + digit + " 未指定"), true);
+            AozaiInkServerHandlers.playFailureFeedback(player);
             return;
         }
         if (!consumePaper(player)) {
             player.displayClientMessage(Component.literal("[AozaiInk] 需要消耗一张纸"), true);
+            AozaiInkServerHandlers.playFailureFeedback(player);
             return;
         }
         InkCandidate selected = new InkCandidate(digit, result.confidence());
@@ -130,6 +139,7 @@ final class QuickCastSessionManager {
             QuickGlyphBinding.Binding binding = QuickGlyphBinding.get(player, selectedGlyph).orElse(null);
             if (binding == null) {
                 player.displayClientMessage(Component.literal("数字 " + selectedGlyph + " 未指定"), true);
+                AozaiInkServerHandlers.playFailureFeedback(player);
                 return null;
             }
             return new DispatchTarget(binding.glyph(), binding.owner(),
@@ -138,6 +148,7 @@ final class QuickCastSessionManager {
         String owner = MoluMenuRegistry.ownerOf(selectedGlyph);
         if (owner.isBlank()) {
             player.displayClientMessage(Component.literal("字 " + selectedGlyph + " 尚未接入快速吟唱"), true);
+            AozaiInkServerHandlers.playFailureFeedback(player);
             return null;
         }
         return new DispatchTarget(selectedGlyph, owner, selectedGlyph, "candidate");
@@ -161,10 +172,16 @@ final class QuickCastSessionManager {
             session.source().tierRank(), extra);
         try {
             AozaiInkCoreApi.recognizer().broadcast(resolved, source, player);
+            playCastConfirm(player);
         } catch (Exception exception) {
             AozaiInkInput.LOGGER.warn("Quick cast broadcast failed", exception);
             player.displayClientMessage(Component.literal("[AozaiInk] 施法失败"), true);
+            AozaiInkServerHandlers.playFailureFeedback(player);
         }
+    }
+
+    private static void playCastConfirm(ServerPlayer player) {
+        player.playNotifySound(SoundEvents.ENCHANTMENT_TABLE_USE, SoundSource.PLAYERS, 0.8f, 1.5f);
     }
 
     private static boolean consumePaper(ServerPlayer player) {

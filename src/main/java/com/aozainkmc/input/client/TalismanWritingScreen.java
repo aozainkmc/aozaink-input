@@ -8,6 +8,7 @@ import com.aozainkmc.core.api.InkRecognitionResult;
 import com.aozainkmc.core.api.InkSource;
 import com.aozainkmc.core.api.InkTrace;
 import com.aozainkmc.input.AozaiInkInput;
+import com.aozainkmc.input.api.TalismanSyntaxRegistry;
 import com.aozainkmc.input.network.AozaiInkNetworking;
 import com.aozainkmc.input.network.SubmitTalismanPayload;
 import java.util.ArrayList;
@@ -46,7 +47,6 @@ public final class TalismanWritingScreen extends Screen {
     private static final int CINNABAR_BORDER = 0xFFB3261E;
     private static final int PAPER = 0xFFF6D05A;
     private static final int PAPER_DARK = 0xFFE0AD35;
-    private static final Set<String> TAIL_MODIFIERS = Set.of("强", "续", "广", "穿");
     private static final ResourceLocation ZHOUWEI_TEXTURE =
         ResourceLocation.fromNamespaceAndPath("aozaink_input", "textures/gui/talisman_zhouwei.png");
     private static final ResourceLocation WEIXIU_TEXTURE =
@@ -382,7 +382,7 @@ public final class TalismanWritingScreen extends Screen {
         String descLine = "";
         boolean invalidTail = index == MODIFIER_SLOT && invalidTailGlyph(recognized);
         if (invalidTail) {
-            descLine = "尾修仅强/续/广/穿";
+            descLine = "尾修槽不接受 " + recognized;
         } else if (!recognized.isEmpty()) {
             GlyphDescriber describer = AozaiInkCoreApi.getService(GlyphDescriber.class);
             if (describer != null) {
@@ -417,7 +417,7 @@ public final class TalismanWritingScreen extends Screen {
         String s1 = slotGlyph(1);
         String s2 = slotGlyph(2);
         if (s0.isEmpty() && s1.isEmpty() && s2.isEmpty()) return List.of();
-        if (invalidTailGlyph(s2)) return List.of("尾修槽只接受 强 / 续 / 广 / 穿");
+        if (invalidTailGlyph(s2)) return List.of("尾修槽不接受 " + s2);
         GlyphDescriber describer = AozaiInkCoreApi.getService(GlyphDescriber.class);
         if (describer == null) return List.of();
         return describer.describe(List.of(s0, s1, s2));
@@ -479,7 +479,7 @@ public final class TalismanWritingScreen extends Screen {
 
     private static boolean invalidTailGlyph(String glyph) {
         String normalized = normalizeGlyph(glyph);
-        return !normalized.isEmpty() && !TAIL_MODIFIERS.contains(normalized);
+        return !normalized.isEmpty() && !TalismanSyntaxRegistry.isTailGlyph(normalized);
     }
 
     private static String normalizeGlyph(String glyph) {

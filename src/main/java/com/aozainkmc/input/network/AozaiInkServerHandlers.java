@@ -17,6 +17,10 @@ import com.aozainkmc.input.item.TalismanAssembly;
 import com.aozainkmc.input.scoring.TailModifierStability;
 import com.aozainkmc.input.scoring.TalismanGrade;
 import com.aozainkmc.input.scoring.TalismanScorer;
+import com.aozainkmc.input.api.TalismanSettlement;
+import com.aozainkmc.input.api.TalismanSettlementHandler;
+import com.aozainkmc.input.api.TalismanSettlementRegistry;
+import com.aozainkmc.input.api.TalismanSyntaxRegistry;
 import com.aozainkmc.input.signal.InputSignals;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -24,12 +28,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
@@ -46,7 +51,6 @@ public final class AozaiInkServerHandlers {
     private static final double MAX_TALISMAN_DISTANCE_SQR = 8.0 * 8.0;
     private static final double MAX_PAPER_DISTANCE_SQR = 10.0 * 10.0;
     private static final long DEFAULT_TTL_TICKS = 20L * 60L * 10L;
-    private static final Set<String> TAIL_MODIFIERS = Set.of("强", "续", "广", "穿");
 
     private AozaiInkServerHandlers() {}
 
@@ -55,28 +59,33 @@ public final class AozaiInkServerHandlers {
         BlockState state = player.serverLevel().getBlockState(pos);
         if (!state.is(AozaiInkBlocks.YELLOW_TALISMAN.get())) {
             player.sendSystemMessage(Component.literal("[AozaiInk] 黄符方块已不存在"));
+            playFailureFeedback(player);
             return;
         }
         if (player.distanceToSqr(pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5) > MAX_TALISMAN_DISTANCE_SQR) {
             player.displayClientMessage(Component.literal("[AozaiInk] 距离黄符方块过远"), true);
+            playFailureFeedback(player);
             return;
         }
 
         List<SubmitTalismanPayload.Slot> slots = payload.slots();
         if (slots == null || slots.size() != 3) {
             player.displayClientMessage(Component.literal("[AozaiInk] 无效的成符请求"), true);
+            playFailureFeedback(player);
             return;
         }
 
         for (SubmitTalismanPayload.Slot slot : slots) {
             if (slot.present() && !AozaiInkRecognitionExecutor.validateTrace(slot.trace())) {
                 player.displayClientMessage(Component.literal("[AozaiInk] 笔迹数据过大"), true);
+                playFailureFeedback(player);
                 return;
             }
         }
 
         if (!AozaiInkRecognitionExecutor.get().tryAcquireCooldown(player)) {
             player.displayClientMessage(Component.literal("[AozaiInk] 识别过快，请稍后再试"), true);
+            playFailureFeedback(player);
             return;
         }
 
@@ -150,8 +159,9 @@ public final class AozaiInkServerHandlers {
         }
 
         String tailGlyph = normalize(glyphs[2]);
-        if (!tailGlyph.isEmpty() && !TAIL_MODIFIERS.contains(tailGlyph)) {
-            player.displayClientMessage(Component.literal("[AozaiInk] 尾修槽只接受 强 / 续 / 广 / 穿"), true);
+        if (!tailGlyph.isEmpty() && !TalismanSyntaxRegistry.isTailGlyph(tailGlyph)) {
+            player.displayClientMessage(Component.literal("[AozaiInk] 尾修槽不接受字 " + tailGlyph), true);
+            playFailureFeedback(player);
             return;
         }
 
@@ -167,6 +177,17 @@ public final class AozaiInkServerHandlers {
                 InputSignals.tailModifierChaos(player, false, false, false);
                 TalismanFormationEffect.startChaos(player, pos);
                 TailModifierFailureEffect.start(player, pos);
+                return;
+            }
+        }
+
+        String glyphOwner = soleGlyphOwner(glyphs);
+        if (!glyphOwner.isEmpty()) {
+            Optional<TalismanSettlementHandler> settlement = TalismanSettlementRegistry.handlerFor(glyphOwner);
+            if (settlement.isPresent()) {
+                settlement.get().settle(
+                    new TalismanSettlement(player, pos, List.of(glyphs), List.copyOf(results))
+                );
                 return;
             }
         }
@@ -187,6 +208,23 @@ public final class AozaiInkServerHandlers {
         player.serverLevel().setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
         TalismanFormationEffect.startSuccess(player, pos, stack);
         player.displayClientMessage(Component.literal("成符: " + formatGlyphs(result.slot1(), result.slot2(), result.slot3())), true);
+        playGradeFeedback(player, overallGrade(stack, new String[] { result.slot1(), result.slot2(), result.slot3() }));
+    }
+
+    private static void playGradeFeedback(ServerPlayer player, TalismanGrade grade) {
+        switch (grade) {
+            case EXQUISITE -> {
+                player.playNotifySound(SoundEvents.AMETHYST_BLOCK_CHIME, SoundSource.PLAYERS, 1.0f, 1.3f);
+                player.playNotifySound(SoundEvents.EXPERIENCE_ORB_PICKUP, SoundSource.PLAYERS, 0.7f, 1.6f);
+            }
+            case FINE -> player.playNotifySound(SoundEvents.AMETHYST_BLOCK_CHIME, SoundSource.PLAYERS, 1.0f, 1.0f);
+            case INFERIOR -> player.playNotifySound(SoundEvents.AMETHYST_BLOCK_CHIME, SoundSource.PLAYERS, 0.8f, 0.7f);
+            case WASTE -> player.playNotifySound(SoundEvents.ITEM_BREAK, SoundSource.PLAYERS, 1.0f, 0.9f);
+        }
+    }
+
+    public static void playFailureFeedback(ServerPlayer player) {
+        player.playNotifySound(SoundEvents.NOTE_BLOCK_BASS.value(), SoundSource.PLAYERS, 0.8f, 0.5f);
     }
 
     private static String formatGlyphs(String... glyphs) {
@@ -296,11 +334,13 @@ public final class AozaiInkServerHandlers {
     public static void castPaper(ServerPlayer player, CastPaperPayload payload) {
         if (!player.getMainHandItem().is(Items.PAPER)) {
             player.displayClientMessage(Component.literal("[AozaiInk] 主手需持纸"), true);
+            playFailureFeedback(player);
             return;
         }
         InkTrace trace = payload.trace();
         if (!AozaiInkRecognitionExecutor.validateTrace(trace)) {
             player.displayClientMessage(Component.literal("[AozaiInk] 笔迹数据过大"), true);
+            playFailureFeedback(player);
             return;
         }
         QuickCastSessionManager.beginRevision(player, payload.revision());
@@ -325,7 +365,10 @@ public final class AozaiInkServerHandlers {
             player,
             request,
             result -> finalizePaperCast(player, result, source, payload.revision()),
-            reason -> player.displayClientMessage(Component.literal("[AozaiInk] 识别失败: " + reason), true)
+            reason -> {
+                player.displayClientMessage(Component.literal("[AozaiInk] 识别失败: " + reason), true);
+                playFailureFeedback(player);
+            }
         );
     }
 
@@ -361,10 +404,12 @@ public final class AozaiInkServerHandlers {
         }
         if (result == null || result.candidates().isEmpty()) {
             player.displayClientMessage(Component.literal("[AozaiInk] 临时施法未生效"), true);
+            playFailureFeedback(player);
             return;
         }
         if (!player.getMainHandItem().is(Items.PAPER)) {
             player.displayClientMessage(Component.literal("[AozaiInk] 主手需持纸"), true);
+            playFailureFeedback(player);
             return;
         }
         if (QuickCastSessionManager.DIGITS.contains(result.topGlyph())) {
@@ -372,6 +417,22 @@ public final class AozaiInkServerHandlers {
         } else {
             QuickCastSessionManager.offer(player, result, source, revision);
         }
+    }
+
+    private static String soleGlyphOwner(String[] glyphs) {
+        String owner = null;
+        for (String glyph : glyphs) {
+            String normalized = normalize(glyph);
+            if (normalized.isEmpty()) continue;
+            String glyphOwner = TalismanSyntaxRegistry.ownerOf(normalized);
+            if (glyphOwner.isEmpty()) return "";
+            if (owner == null) {
+                owner = glyphOwner;
+            } else if (!owner.equals(glyphOwner)) {
+                return "";
+            }
+        }
+        return owner == null ? "" : owner;
     }
 
     private static String normalize(String glyph) {

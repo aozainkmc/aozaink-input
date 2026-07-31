@@ -102,6 +102,13 @@ AozaiInkCoreApi.registerGlyphs(TALISMAN_GLYPHS);
 
 `aozaink-input` 注册 `/aozaink_input dev` 命令（需要 op 权限），用于切换当前游戏会话的开发模式。未来所有调试/管理子命令都需要先开启此模式才能使用。
 
+## 玩法模块接入
+
+玩法模块通过两个注册表接入三格链路：
+
+- `TalismanSyntaxRegistry.register(owner, structure, base, tail)`：登记模块的结构字、基础字与尾修字；跨模块撞字直接抛错。尾修槽合法性（`isTailGlyph`）与字归属（`ownerOf`）都查这里。
+- `TalismanSettlementRegistry.register(owner, handler)`：登记模块的成符结算器。三格识别、评分、尾修暴乱检查通过后，若所有已写字属于同一 owner 且该 owner 注册了结算器，则由 `TalismanSettlementHandler.settle(TalismanSettlement)` 全权接管（校验、玩法结算、消耗黄符方块、玩家反馈）；否则回落到 Sigillum 的硬编码分类（`TalismanAssembly`）。混合多模块的字组合不触发结算，按废符处理。
+
 ## 构建依赖
 
 ```groovy

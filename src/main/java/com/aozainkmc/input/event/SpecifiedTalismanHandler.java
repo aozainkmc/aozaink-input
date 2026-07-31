@@ -5,6 +5,7 @@ import com.aozainkmc.input.binding.QuickGlyphBinding;
 import com.aozainkmc.input.api.QuickBindingChangedEvent;
 import com.aozainkmc.input.item.AozaiInkItems;
 import com.aozainkmc.input.item.TalismanAssembly;
+import com.aozainkmc.input.network.AozaiInkServerHandlers;
 import com.aozainkmc.input.network.InputBindingRitualPayload;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.ClickEvent;
@@ -53,6 +54,7 @@ public final class SpecifiedTalismanHandler {
         String glyph = tag.getString(TalismanAssembly.TAG_SLOT2);
         if (!QuickGlyphBinding.isChineseDigit(digit) || glyph.isBlank()) {
             player.displayClientMessage(Component.literal("指定符内容无效"), true);
+            AozaiInkServerHandlers.playFailureFeedback(player);
             return true;
         }
         QuickGlyphBinding.bind(player, digit, glyph);

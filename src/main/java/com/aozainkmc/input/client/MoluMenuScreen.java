@@ -3,6 +3,7 @@ package com.aozainkmc.input.client;
 import com.aozainkmc.core.AozaiInkCoreApi;
 import com.aozainkmc.core.api.GlyphDescriber;
 import com.aozainkmc.input.AozaiInkInput;
+import com.aozainkmc.input.api.TalismanSyntaxRegistry;
 import com.aozainkmc.input.network.ClearQuickBindingPayload;
 import com.aozainkmc.input.network.MoluMenuPayload;
 import java.util.ArrayList;
@@ -36,7 +37,6 @@ public final class MoluMenuScreen extends Screen {
     private static final int SLOT_COUNT = 9;
     private static final float BRIEF_TEXT_SCALE = 1.15f;
     private static final float DETAIL_TEXT_SCALE = 0.82f;
-    private static final Set<String> TAIL_MODIFIERS = Set.of("强", "续", "广", "穿");
 
     private final Map<Integer, MoluMenuPayload.BindingEntry> bindings = new LinkedHashMap<>();
     private final List<MoluMenuPayload.GlyphEntry> glyphs;
@@ -48,6 +48,7 @@ public final class MoluMenuScreen extends Screen {
     private int panelX;
     private int panelY;
     private int activeTab;
+    private int tabScrollRows;
     private boolean detailed = true;
 
     public MoluMenuScreen(MoluMenuPayload payload) {
@@ -377,9 +378,9 @@ public final class MoluMenuScreen extends Screen {
     }
 
     private List<String> buildComboDescription() {
-        boolean invalidTail = !comboSlots[2].isEmpty() && !TAIL_MODIFIERS.contains(comboSlots[2]);
+        boolean invalidTail = !comboSlots[2].isEmpty() && !TalismanSyntaxRegistry.isTailGlyph(comboSlots[2]);
         if (invalidTail) {
-            return List.of("尾修槽只接受 强 / 续 / 广 / 穿");
+            return List.of("尾修槽不接受字 " + comboSlots[2]);
         }
         if (comboSlots[0].isEmpty() && comboSlots[1].isEmpty() && comboSlots[2].isEmpty()) {
             return List.of("点击下方字填入槽位，查看组合效果");
@@ -443,6 +444,9 @@ public final class MoluMenuScreen extends Screen {
     }
 
     private void drawTabs(GuiGraphics g, int mouseX, int mouseY) {
+        tabScrollRows = clamp(tabScrollRows, 0, maxTabScrollRows());
+        int[] first = tabRect(0);
+        g.enableScissor(first[0] - 4, contentY(), first[0] + first[2] + 4, bottomY());
         for (int index = 0; index < tabLabels.size(); index++) {
             int[] rect = tabRect(index);
             boolean selected = activeTab == index;
@@ -458,6 +462,11 @@ public final class MoluMenuScreen extends Screen {
             }
             drawScaledCenteredString(g, tabLabels.get(index), rect[0] + rect[2] / 2,
                 rect[1] + (rect[3] - 9) / 2, text, 1.15f);
+        }
+        g.disableScissor();
+        if (maxTabScrollRows() > 0) {
+            drawScrollBar(g, first[0], contentY(), first[2], bottomY() - contentY(),
+                tabLabels.size(), tabVisibleRows(), tabScrollRows);
         }
     }
 
@@ -690,10 +699,12 @@ public final class MoluMenuScreen extends Screen {
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
         if (button != 0) return super.mouseClicked(mouseX, mouseY, button);
-        for (int index = 0; index < tabLabels.size(); index++) {
-            if (hit(mouseX, mouseY, tabRect(index))) {
-                activeTab = index;
-                return true;
+        if (mouseY >= contentY() && mouseY < bottomY()) {
+            for (int index = 0; index < tabLabels.size(); index++) {
+                if (hit(mouseX, mouseY, tabRect(index))) {
+                    activeTab = index;
+                    return true;
+                }
             }
         }
         if (hit(mouseX, mouseY, backRect())) {
@@ -764,6 +775,14 @@ public final class MoluMenuScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
+        if (mouseX >= panelX && mouseX < contentX() && maxTabScrollRows() > 0) {
+            int nextRow = clamp(tabScrollRows + (scrollY < 0.0 ? 1 : -1), 0, maxTabScrollRows());
+            if (nextRow != tabScrollRows) {
+                tabScrollRows = nextRow;
+                return true;
+            }
+            return false;
+        }
         if (!hit(mouseX, mouseY, new int[] {contentX(), contentY(), contentW(), contentH()})) {
             return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
         }
@@ -819,14 +838,26 @@ public final class MoluMenuScreen extends Screen {
     private int contentW() { return panelX + panelW() - contentX() - Math.max(14, panelW() / 42); }
     private int contentH() { return bottomY() - contentY() - Math.max(14, panelH() / 40); }
     private int bottomY() { return panelY + panelH() - Math.max(34, panelH() / 12); }
-    private int tabH() { return Math.max(24, Math.min(42, panelH() / Math.max(10, tabLabels.size() + 9))); }
+    private int tabH() {
+        int count = Math.max(1, tabLabels.size());
+        int fit = (bottomY() - contentY() - 5 * (count - 1)) / count;
+        return clamp(fit, 16, 42);
+    }
+
+    private int tabVisibleRows() {
+        return Math.max(1, (bottomY() - contentY()) / (tabH() + 5));
+    }
+
+    private int maxTabScrollRows() {
+        return Math.max(0, tabLabels.size() - tabVisibleRows());
+    }
     private int buttonW() { return Math.max(64, Math.min(112, panelW() / 7)); }
     private int buttonH() { return Math.max(20, Math.min(34, panelH() / 17)); }
     private int recipeSlotSize() { return Math.max(24, Math.min(34, panelH() / 14)); }
 
     private int[] tabRect(int index) {
         int x = panelX + Math.max(12, panelW() / 60);
-        int y = contentY() + index * (tabH() + 5);
+        int y = contentY() + (index - tabScrollRows) * (tabH() + 5);
         return new int[] {x, y, sidebarW() - Math.max(24, panelW() / 30), tabH()};
     }
 

@@ -56,12 +56,12 @@ public final class YellowTalismanItem extends BlockItem {
             tooltip.add(Component.literal("只能放在工作台上").withStyle(ChatFormatting.DARK_GRAY));
             return;
         }
-        tooltip.add(Component.literal("类型: " + TalismanAssembly.displayType(type)).withStyle(ChatFormatting.GOLD));
+        tooltip.add(Component.literal("类型：" + TalismanAssembly.displayType(type)).withStyle(ChatFormatting.GOLD));
         TalismanGrade grade = overallGrade(tag);
         if (grade != null) {
-            tooltip.add(Component.literal("品质: " + grade.display()).withStyle(gradeColor(grade)));
+            tooltip.add(Component.literal("品质：" + grade.display()).withStyle(gradeColor(grade)));
         }
-        tooltip.add(Component.literal("字: "
+        tooltip.add(Component.literal("字："
             + slot(tag, TalismanAssembly.TAG_SLOT1) + " / "
             + slot(tag, TalismanAssembly.TAG_SLOT2) + " / "
             + slot(tag, TalismanAssembly.TAG_SLOT3)).withStyle(ChatFormatting.GRAY));
