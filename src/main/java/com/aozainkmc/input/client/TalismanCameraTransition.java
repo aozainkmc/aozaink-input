@@ -1,7 +1,9 @@
 package com.aozainkmc.input.client;
 
+import com.aozainkmc.input.block.YellowTalismanBlock;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.util.Mth;
 import net.minecraft.world.phys.Vec3;
 
@@ -12,8 +14,6 @@ public final class TalismanCameraTransition {
     private static final double MIN_DURATION_SECONDS = 0.50D;
     private static final double MAX_DURATION_SECONDS = 1.15D;
     private static final float OPEN_SCREEN_PROGRESS = 0.80F;
-    /** Keeps the north/south axis vertical on screen when looking straight down. */
-    private static final float FINAL_TOP_DOWN_YAW = 180.0F;
 
     private static Transition active;
 
@@ -22,6 +22,7 @@ public final class TalismanCameraTransition {
     public static void start(Minecraft minecraft, BlockPos blockPos) {
         if (active != null || minecraft.player == null || minecraft.level == null || minecraft.screen != null) return;
 
+        Direction facing = minecraft.level.getBlockState(blockPos).getValue(YellowTalismanBlock.FACING);
         Vec3 startPosition = minecraft.player.getEyePosition(1.0F);
         Vec3 target = Vec3.atCenterOf(blockPos).add(0.0D, 0.04D, 0.0D);
         Vec3 endPosition = target.add(0.0D, CAMERA_HEIGHT, 0.0D);
@@ -39,6 +40,7 @@ public final class TalismanCameraTransition {
             target,
             minecraft.player.getYRot(),
             minecraft.player.getXRot(),
+            facing.toYRot(),
             System.nanoTime(),
             (long) (durationSeconds * 1_000_000_000L),
             false,
@@ -106,7 +108,7 @@ public final class TalismanCameraTransition {
         float[] targetRotation = lookAt(position, transition.target());
         float rotationProgress = smoothStep(Mth.clamp(rawProgress * 1.18F, 0.0F, 1.0F));
         float alignmentProgress = smoothStep(Mth.clamp((rawProgress - 0.42F) / 0.58F, 0.0F, 1.0F));
-        float alignedTargetYaw = Mth.rotLerp(alignmentProgress, targetRotation[0], FINAL_TOP_DOWN_YAW);
+        float alignedTargetYaw = Mth.rotLerp(alignmentProgress, targetRotation[0], transition.finalYaw());
         float yaw = Mth.rotLerp(rotationProgress, transition.startYaw(), alignedTargetYaw);
         float pitch = Mth.lerp(rotationProgress, transition.startPitch(), targetRotation[1]);
         return new CameraPose(position, yaw, pitch);
@@ -153,6 +155,7 @@ public final class TalismanCameraTransition {
         Vec3 target,
         float startYaw,
         float startPitch,
+        float finalYaw,
         long startNanos,
         long durationNanos,
         boolean screenOpened,
@@ -166,7 +169,7 @@ public final class TalismanCameraTransition {
 
         Transition withScreenOpened() {
             return new Transition(blockPos, startPosition, endPosition, target, startYaw, startPitch,
-                startNanos, durationNanos, true, false, 0L, false);
+                finalYaw, startNanos, durationNanos, true, false, 0L, false);
         }
 
         float returnProgress(long nowNanos) {
@@ -177,7 +180,7 @@ public final class TalismanCameraTransition {
 
         Transition withReturnStarted(long nowNanos, boolean focusTalisman) {
             return new Transition(blockPos, startPosition, endPosition, target, startYaw, startPitch,
-                startNanos, durationNanos, true, true, nowNanos, focusTalisman);
+                finalYaw, startNanos, durationNanos, true, true, nowNanos, focusTalisman);
         }
     }
 }

@@ -14,6 +14,7 @@ import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
@@ -89,8 +90,11 @@ public final class TalismanFormationRenderer {
         if (facing.lengthSqr() < 0.0001D) facing = new Vec3(0.0D, 0.0D, 1.0D);
         facing = facing.normalize();
         Vec3 rightVertical = new Vec3(facing.z, 0.0D, -facing.x);
-        Vec3 right = new Vec3(1.0D, 0.0D, 0.0D).lerp(rightVertical, rise).normalize();
-        Vec3 up = new Vec3(0.0D, 0.0D, 1.0D).lerp(new Vec3(0.0D, 1.0D, 0.0D), rise).normalize();
+        Direction placed = payload.facing();
+        Vec3 flatUp = new Vec3(placed.getStepX(), 0.0D, placed.getStepZ());
+        Vec3 flatRight = new Vec3(-flatUp.z, 0.0D, flatUp.x);
+        Vec3 right = flatRight.lerp(rightVertical, rise).normalize();
+        Vec3 up = flatUp.lerp(new Vec3(0.0D, 1.0D, 0.0D), rise).normalize();
 
         if (!payload.chaos() && age > 14.0F && owner != null) {
             float fly = smooth(Math.min(1.0F, (age - 14.0F) / 14.0F));

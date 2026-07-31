@@ -10,6 +10,7 @@ import com.aozainkmc.core.api.InkTrace;
 import com.aozainkmc.core.recognizer.AozaiInkRecognitionExecutor;
 import com.aozainkmc.input.AozaiInkInput;
 import com.aozainkmc.input.block.AozaiInkBlocks;
+import com.aozainkmc.input.block.YellowTalismanBlock;
 import com.aozainkmc.input.effect.TailModifierFailureEffect;
 import com.aozainkmc.input.effect.TalismanFormationEffect;
 import com.aozainkmc.input.item.AozaiInkItems;
@@ -30,6 +31,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -151,6 +153,7 @@ public final class AozaiInkServerHandlers {
         if (!player.serverLevel().getBlockState(pos).is(AozaiInkBlocks.YELLOW_TALISMAN.get())) {
             return;
         }
+        Direction facing = player.serverLevel().getBlockState(pos).getValue(YellowTalismanBlock.FACING);
 
         String[] glyphs = new String[3];
         for (int i = 0; i < 3; i++) {
@@ -175,7 +178,7 @@ public final class AozaiInkServerHandlers {
                 player.serverLevel().setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
                 player.displayClientMessage(Component.literal("尾修失败，符力暴乱"), true);
                 InputSignals.tailModifierChaos(player, false, false, false);
-                TalismanFormationEffect.startChaos(player, pos);
+                TalismanFormationEffect.startChaos(player, pos, facing);
                 TailModifierFailureEffect.start(player, pos);
                 return;
             }
@@ -186,7 +189,7 @@ public final class AozaiInkServerHandlers {
             Optional<TalismanSettlementHandler> settlement = TalismanSettlementRegistry.handlerFor(glyphOwner);
             if (settlement.isPresent()) {
                 settlement.get().settle(
-                    new TalismanSettlement(player, pos, List.of(glyphs), List.copyOf(results))
+                    new TalismanSettlement(player, pos, List.of(glyphs), List.copyOf(results), facing)
                 );
                 return;
             }
@@ -206,7 +209,7 @@ public final class AozaiInkServerHandlers {
         triggerTalismanCreated(player, result, stack);
 
         player.serverLevel().setBlock(pos, Blocks.AIR.defaultBlockState(), 3);
-        TalismanFormationEffect.startSuccess(player, pos, stack);
+        TalismanFormationEffect.startSuccess(player, pos, stack, facing);
         player.displayClientMessage(Component.literal("成符: " + formatGlyphs(result.slot1(), result.slot2(), result.slot3())), true);
         playGradeFeedback(player, overallGrade(stack, new String[] { result.slot1(), result.slot2(), result.slot3() }));
     }

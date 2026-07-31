@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -23,13 +24,13 @@ public final class TalismanFormationEffect {
 
     private TalismanFormationEffect() {}
 
-    public static void startSuccess(ServerPlayer owner, BlockPos pos, ItemStack stack) {
-        broadcast(owner.serverLevel(), pos, new TalismanFormationPayload(pos, owner.getUUID(), false));
+    public static void startSuccess(ServerPlayer owner, BlockPos pos, ItemStack stack, Direction facing) {
+        broadcast(owner.serverLevel(), pos, new TalismanFormationPayload(pos, owner.getUUID(), false, facing));
         PENDING.add(new PendingGrant(owner.serverLevel(), pos.immutable(), owner.getUUID(), stack.copy()));
     }
 
-    public static void startChaos(ServerPlayer owner, BlockPos pos) {
-        broadcast(owner.serverLevel(), pos, new TalismanFormationPayload(pos, owner.getUUID(), true));
+    public static void startChaos(ServerPlayer owner, BlockPos pos, Direction facing) {
+        broadcast(owner.serverLevel(), pos, new TalismanFormationPayload(pos, owner.getUUID(), true, facing));
     }
 
     @SubscribeEvent

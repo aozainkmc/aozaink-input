@@ -12,18 +12,34 @@ import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.LevelReader;
+import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.StateDefinition;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 public final class YellowTalismanBlock extends Block {
+    public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
     private static final VoxelShape SHAPE = Block.box(1.0D, 0.0D, 1.0D, 15.0D, 1.0D, 15.0D);
 
     public YellowTalismanBlock(Properties properties) {
         super(properties);
+        registerDefaultState(stateDefinition.any().setValue(FACING, Direction.NORTH));
+    }
+
+    @Override
+    protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
+        builder.add(FACING);
+    }
+
+    @Override
+    public BlockState getStateForPlacement(BlockPlaceContext context) {
+        return defaultBlockState().setValue(FACING, context.getHorizontalDirection());
     }
 
     @Override

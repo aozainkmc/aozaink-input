@@ -1,5 +1,8 @@
 {
   "variants": {
-    "": { "model": "aozaink_input:block/yellow_talisman" }
+    "facing=north": { "model": "aozaink_input:block/yellow_talisman" },
+    "facing=east": { "model": "aozaink_input:block/yellow_talisman", "y": 90 },
+    "facing=south": { "model": "aozaink_input:block/yellow_talisman", "y": 180 },
+    "facing=west": { "model": "aozaink_input:block/yellow_talisman", "y": 270 }
   }
 }
