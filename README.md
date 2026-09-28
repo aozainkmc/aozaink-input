@@ -70,6 +70,7 @@ int simplifiedStrokeCount;
 ## 黄符方块和物品
 
 - `aozaink_input:yellow_talisman`：空白黄符是可放置 BlockItem，只能放在工作台上。最大堆叠 **64**。
+- 方块带 `HORIZONTAL_FACING`，放置时按玩家面向对齐东南西北四向（南瓜头式），放下即固定；书写 UI 的俯视相机与成符动画都以该朝向为基准。
 - 合成配方：3 × `minecraft:paper` + 1 × `minecraft:yellow_dye` → 6 × `aozaink_input:yellow_talisman`。
 - 已成符黄符写有 `CustomData`，不能再放置；gameplay 右键释放/使用。
 - 右键黄符方块：打开三格书写 UI。
@@ -107,7 +108,7 @@ AozaiInkCoreApi.registerGlyphs(TALISMAN_GLYPHS);
 玩法模块通过两个注册表接入三格链路：
 
 - `TalismanSyntaxRegistry.register(owner, structure, base, tail)`：登记模块的结构字、基础字与尾修字；跨模块撞字直接抛错。尾修槽合法性（`isTailGlyph`）与字归属（`ownerOf`）都查这里。
-- `TalismanSettlementRegistry.register(owner, handler)`：登记模块的成符结算器。三格识别、评分、尾修暴乱检查通过后，若所有已写字属于同一 owner 且该 owner 注册了结算器，则由 `TalismanSettlementHandler.settle(TalismanSettlement)` 全权接管（校验、玩法结算、消耗黄符方块、玩家反馈）；否则回落到 Sigillum 的硬编码分类（`TalismanAssembly`）。混合多模块的字组合不触发结算，按废符处理。
+- `TalismanSettlementRegistry.register(owner, handler)`：登记模块的成符结算器。三格识别、评分、尾修暴乱检查通过后，若所有已写字属于同一 owner 且该 owner 注册了结算器，则由 `TalismanSettlementHandler.settle(TalismanSettlement)` 全权接管（校验、玩法结算、消耗黄符方块、玩家反馈）；否则回落到 Sigillum 的硬编码分类（`TalismanAssembly`）。混合多模块的字组合不触发结算，按废符处理。数字`一～九`是共享数量词，判定 owner 时跳过（由模块结算器自己解释数量）；但`[数字][字][空]`始终是 Input 的指定符，不交给模块。`TalismanSettlement.facing` 携带黄符方块的放置朝向（由 input 在方块被消耗前捕获），需要播放成符动画（`TalismanFormationEffect`）时直接转发，不要自己读 blockstate。
 
 ## 构建依赖
 

@@ -264,5 +264,47 @@
     "duration_ms": 4700.0,
     "confidence": 0.9999998211860657,
     "samples": 2
+  },
+  "赤": {
+    "stroke_count": 7.0,
+    "point_count": 19.5,
+    "duration_ms": 4161.5,
+    "confidence": 1.0,
+    "samples": 2
+  },
+  "白": {
+    "stroke_count": 5.0,
+    "point_count": 16.5,
+    "duration_ms": 2289.5,
+    "confidence": 1.0,
+    "samples": 2
+  },
+  "指": {
+    "stroke_count": 9.0,
+    "point_count": 30.5,
+    "duration_ms": 4232.5,
+    "confidence": 1.0,
+    "samples": 2
+  },
+  "收": {
+    "stroke_count": 6.0,
+    "point_count": 20.5,
+    "duration_ms": 2577.0,
+    "confidence": 1.0,
+    "samples": 2
+  },
+  "速": {
+    "stroke_count": 10.0,
+    "point_count": 32.0,
+    "duration_ms": 4269.5,
+    "confidence": 1.0,
+    "samples": 2
+  },
+  "坚": {
+    "stroke_count": 7.0,
+    "point_count": 23.0,
+    "duration_ms": 2731.5,
+    "confidence": 1.0,
+    "samples": 2
   }
 }

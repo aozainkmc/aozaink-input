@@ -184,7 +184,7 @@ public final class AozaiInkServerHandlers {
             }
         }
 
-        String glyphOwner = soleGlyphOwner(glyphs);
+        String glyphOwner = isSpecifiedShape(glyphs) ? "" : soleGlyphOwner(glyphs);
         if (!glyphOwner.isEmpty()) {
             Optional<TalismanSettlementHandler> settlement = TalismanSettlementRegistry.handlerFor(glyphOwner);
             if (settlement.isPresent()) {
@@ -422,11 +422,17 @@ public final class AozaiInkServerHandlers {
         }
     }
 
+    // Digits in the first slot with an empty tail are Input's binding talisman, never a module's.
+    private static boolean isSpecifiedShape(String[] glyphs) {
+        return AozaiInkInput.TALISMAN_GLYPHS.contains(normalize(glyphs[0])) && normalize(glyphs[2]).isEmpty();
+    }
+
+    // Digits are shared quantity words: they never decide ownership; the owning module validates them.
     private static String soleGlyphOwner(String[] glyphs) {
         String owner = null;
         for (String glyph : glyphs) {
             String normalized = normalize(glyph);
-            if (normalized.isEmpty()) continue;
+            if (normalized.isEmpty() || AozaiInkInput.TALISMAN_GLYPHS.contains(normalized)) continue;
             String glyphOwner = TalismanSyntaxRegistry.ownerOf(normalized);
             if (glyphOwner.isEmpty()) return "";
             if (owner == null) {
